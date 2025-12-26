@@ -9,6 +9,5 @@ package-lock.json
 # build
 main.js
 *.js.map
-src/settings.ts
 
 data.json
