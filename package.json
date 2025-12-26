@@ -1,14 +1,14 @@
 {
-    "name": "obsidian-charts",
-    "version": "3.9.0",
-    "description": "This Plugin lets you create Charts within Obsidian",
+    "name": "obsidian-timeline-charts",
+    "version": "0.0.1",
+    "description": "This Plugin lets you create Charts within Obsidian, but this time in gantt style",
     "main": "main.js",
     "scripts": {
         "dev": "node dev.config.mjs",
         "build": "node release.config.mjs"
     },
     "keywords": [],
-    "author": "phibr0",
+    "author": "BigManMichael11",
     "license": "MIT",
     "devDependencies": {
         "@rollup/plugin-commonjs": "^15.1.0",
