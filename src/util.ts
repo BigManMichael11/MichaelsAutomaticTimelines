@@ -80,16 +80,18 @@ export class chartTimeline extends Chart{
     yearLength: number = 0;
 
     currentYear: number = 0;
+    ownPath: string = "";
 
     
 
-    constructor(context, chartOptions, calendar, plugin){
+    constructor(context, chartOptions, calendar, plugin, ownPath: string) {
         super(context, chartOptions);
 
         this.plugin = plugin;
         this.name = calendar.name;
         this.id = calendar.id;
         this.weekOverflow = calendar.static.overflow;
+        this.ownPath = ownPath;
 
         for(let day of calendar.static.weekdays){
             this.weekdays.push(day);
@@ -431,10 +433,13 @@ function sortEvents(datalist: EventType[]){
     return localDataList;
 }
 
-function getEvents(){
+function getEvents(ownPath: string){
     var dataList = [];
     var Pages = dv.pages().where(t => t.timelines);
+
+    var shownTimelines = dv.page(ownPath).timelines_rendered;
     for (let page of Pages) {
+        if (page.timelines.some(value => shownTimelines.includes(value)) == false) continue;
         //console.log(page.level);
         var dataObject = {
         timeline: page.timelines,
@@ -494,9 +499,9 @@ function levels_var_to_array(){
     return myStrings;
 }
 
-export function getTimeline(){
+export function getTimeline(ownPath: string) {
     updateVars();
-    var Events = getEvents();
+    var Events = getEvents(ownPath);
     var EventsData = eventsToData(Events);
     var levels = levels_var_to_array();
 

@@ -7,6 +7,9 @@ import annotationPlugin from 'chartjs-plugin-annotation'
 
 import { getTimeline } from 'src/util';
 
+import { getAPI } from "obsidian-dataview";
+const dv = getAPI();
+
 Chart.register(...registerables, annotationPlugin, SankeyController, Flow);
 
 import {chartTimeline} from "src/util";
@@ -19,10 +22,10 @@ export default class Renderer {
         this.plugin = plugin;
     }
 
-    renderTimeline(data: any, el: HTMLElement): chartTimeline {
+    renderTimeline(data: any, el: HTMLElement, ownPath: string): chartTimeline {
         const destination = el.createEl('canvas');
         //let chart = new Chart(destination.getContext("2d"), getTimeline());
-        let chart = new chartTimeline(destination.getContext("2d"), getTimeline(), myData.calendars[0], this.plugin);
+        let chart = new chartTimeline(destination.getContext("2d"), getTimeline(ownPath), myData.calendars[0], this.plugin, ownPath);
 
 
         chart.updateScaleHeight();
@@ -73,7 +76,7 @@ class ChartRenderChild extends MarkdownRenderChild {
 
     async onload() {
         try {
-            this.chart = this.renderer.renderTimeline(this.data, this.containerEl);
+            this.chart = this.renderer.renderTimeline(this.data, this.containerEl, this.ownPath);
         } catch (error) {
             renderError(error, this.el);
         }

@@ -16,8 +16,6 @@ import Renderer from './chartRenderer';
 import { renderError } from 'src/util';
 
 
-
-
 import { Chart } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
@@ -70,7 +68,6 @@ export default class ChartPlugin extends Plugin {
     //window.renderChart = this.renderer.renderTimeline;
 
     this.registerMarkdownCodeBlockProcessor('chart', this.postprocessor.bind(this));
-
   }
 
   onunload() {
