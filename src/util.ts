@@ -439,7 +439,7 @@ function getEvents(ownPath: string){
 
     var shownTimelines = dv.page(ownPath).timelines_rendered;
     for (let page of Pages) {
-        if(page.timelines.some(value => shownTimelines.includes(value)) == false && shownTimelines != null) continue;
+        if (page.timelines.some(value => shownTimelines.includes(value)) == false && shownTimelines != null) continue;
         if(page["fc-display-name"] == null) continue;
         if(page["fc-date"] == null) continue;
         if(page["fc-end"] == null) continue;
@@ -462,7 +462,8 @@ function getEvents(ownPath: string){
 
 function tripletToValue(string: string) : number {
     var splitString = String(string).split('-');
-    return Number(splitString[0]) * year_value + (Number(splitString[1]) - 1) * month_value + Number(splitString[2]) - 1;
+    // if 0 is put in as a day or month, it is treated as 1
+    return Number(splitString[0]) * year_value + ((Math.min(Number(splitString[1]), 1)) - 1) * month_value + Math.min(Number(splitString[2]), 1) - 1;
 }
 
 
