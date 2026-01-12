@@ -439,7 +439,10 @@ function getEvents(ownPath: string){
 
     var shownTimelines = dv.page(ownPath).timelines_rendered;
     for (let page of Pages) {
-        if (page.timelines.some(value => shownTimelines.includes(value)) == false) continue;
+        if(page.timelines.some(value => shownTimelines.includes(value)) == false && shownTimelines != null) continue;
+        if(page["fc-display-name"] == null) continue;
+        if(page["fc-date"] == null) continue;
+        if(page["fc-end"] == null) continue;
         //console.log(page.level);
         var dataObject = {
         timeline: page.timelines,
