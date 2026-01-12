@@ -140,6 +140,7 @@ export class chartTimeline extends Chart{
 
     returnYearNumber(value: number): number{
         if (value > 0) return Math.round(value / this.yearLength);
+        if (value == 0) return 0;
         return Math.round((value - year_value - 1) / year_value);
     }
 
@@ -169,7 +170,7 @@ export class chartTimeline extends Chart{
 
     returnMonthOfYear(value: number){
         var true_value = this.getTrueValue(value);
-        var idx = Math.round(true_value / month_value) % year_value;
+        var idx = Math.round(true_value / month_value) % (year_value / month_value);
         return idx + 1;
     }
 
