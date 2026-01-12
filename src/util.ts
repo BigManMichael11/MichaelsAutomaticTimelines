@@ -463,7 +463,7 @@ function getEvents(ownPath: string){
 function tripletToValue(string: string) : number {
     var splitString = String(string).split('-');
     // if 0 is put in as a day or month, it is treated as 1
-    return Number(splitString[0]) * year_value + ((Math.min(Number(splitString[1]), 1)) - 1) * month_value + Math.min(Number(splitString[2]), 1) - 1;
+    return Number(splitString[0]) * year_value + ((Math.max(Number(splitString[1]), 1)) - 1) * month_value + Math.max(Number(splitString[2]), 1) - 1;
 }
 
 
