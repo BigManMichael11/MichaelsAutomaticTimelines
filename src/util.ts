@@ -655,28 +655,29 @@ export function getTimeline(ownPath: string) {
                 },
                 annotation: {
                     annotations: {
-                        bar_major: function(context){
-                            return context.chart.getScale(0);
-                        },
-                        bar_minor_left: function(context){
-                            return context.chart.getScale(-1);
-                        },
-                        bar_minor_right: function(context){
-                            return context.chart.getScale(1);
-                        },
-                        label1: function(context){
-                            var center = context.chart.chartMiddle(context.chart.chartBounds()) + context.chart.chartXRangeDiff() / 6;
-                            return {
-                                type: 'label',
-                                color: "rgba(255, 255, 255, 0.5)",
-                                xValue: center,
-                                yValue: context.chart.scaleHeightBox - 0.5,
-                                content: [context.chart.tickString],
-                                font: {
-                                    size: 12,
-                                }
-                            }
-                        }
+                        // uncomment to enable scale boxes
+                        // bar_major: function(context){
+                        //     return context.chart.getScale(0);
+                        // },
+                        // bar_minor_left: function(context){
+                        //     return context.chart.getScale(-1);
+                        // },
+                        // bar_minor_right: function(context){
+                        //     return context.chart.getScale(1);
+                        // },
+                        // label1: function(context){
+                        //     var center = context.chart.chartMiddle(context.chart.chartBounds()) + context.chart.chartXRangeDiff() / 6;
+                        //     return {
+                        //         type: 'label',
+                        //         color: "rgba(255, 255, 255, 0.5)",
+                        //         xValue: center,
+                        //         yValue: context.chart.scaleHeightBox - 0.5,
+                        //         content: [context.chart.tickString],
+                        //         font: {
+                        //             size: 12,
+                        //         }
+                        //     }
+                        // }
                         /*line_base: function(context){return context.chart.getLine(0, "rgba(112, 112, 112, 1)", context.chart);},
                         line_day: function(context){return context.chart.getLine(day_value, "rgba(231, 228, 29, 1)", context.chart);},
                         line_year: function(context){return context.chart.getLine(year_value, "rgba(107, 39, 196, 1)", context.chart);},
