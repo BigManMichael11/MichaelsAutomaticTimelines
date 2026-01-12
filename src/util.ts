@@ -396,7 +396,10 @@ function getBarColor(){
 function range_to_data_lvl(range:[number, number], level: number){
     var myData = [];
     for (let i = 0 ; i < (level - 1); i++) myData.push(null);
-    myData.push(range);
+    var myRange = range;
+    // do not let 0 length events not display, forcibly make them longer.
+    if (range[1] - range[0] < 0.1) myRange = [range[0], range[0] + 0.49];
+    myData.push(myRange);
     return myData;
 }
 
