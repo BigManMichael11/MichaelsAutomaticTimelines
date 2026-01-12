@@ -408,7 +408,7 @@ function range_to_data_lvl(range:[number, number], level: number){
 
 function sortThisEvent(dataList: EventType[], event: EventType, level: number){
     for(let e of dataList){
-        var overlapping = e.start <= event.end && event.start <= e.end;
+        var overlapping = e.start < event.end && event.start < e.end;
         if(e != event && e.valid && e.level == level && (overlapping)){
             return sortThisEvent(dataList, event, level + 1);
         }
