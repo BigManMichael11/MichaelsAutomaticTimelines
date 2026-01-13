@@ -28,6 +28,8 @@ type EventType = {
     eventName: string,
     start: number,
     end: number,
+    trueStart: number,
+    trueEnd: number,
     level: number,
     valid: boolean,
 }
@@ -350,9 +352,9 @@ var year_value  = 336;
 var month_value = 28;
 var week_value  = 7;
 var day_value   = 1;
+var MIN_EVENT_RANGE = 0.1;
 
-
-function updateVars(){
+function updateVars(ownPath: string){
     var myMonths : string[] = [];
     var tmpYearValue = 0;
     var tmpMonthValue = 0;
@@ -378,6 +380,10 @@ function updateVars(){
     week_value = myData.calendars[0].static.weekdays.length;
     day_value = 1;
 
+    if (dv.page(ownPath).MIN_EVENT_RANGE != null){
+        MIN_EVENT_RANGE = dv.page(ownPath).MIN_EVENT_RANGE;
+    }
+
     return;
 }
 
@@ -397,10 +403,15 @@ function getBarColor(){
 function range_to_data_lvl(range:[number, number], level: number){
     var myData = [];
     for (let i = 0 ; i < (level - 1); i++) myData.push(null);
-    var myRange = range;
-    // do not let 0 length events not display, forcibly make them longer.
-    if (range[1] - range[0] < 0.1) myRange = [range[0], range[0] + 0.49];
-    myData.push(myRange);
+    
+    var start: number = range[0];
+    var end: number = range[1];
+
+    // // do not let 0 length events not display, forcibly make them longer.
+    // if (Math.abs(range[1] - range[0]) < MIN_EVENT_RANGE){
+    //     end = Number(range[0] + MIN_EVENT_RANGE);
+    // }
+    myData.push([start, end]);
     return myData;
 }
 
@@ -409,6 +420,10 @@ function range_to_data_lvl(range:[number, number], level: number){
 function sortThisEvent(dataList: EventType[], event: EventType, level: number){
     for(let e of dataList){
         var overlapping = e.start < event.end && event.start < e.end;
+        if (Math.abs(event.start) - Math.abs(event.end) == 0){
+            // if event is 0 length, check for <= instead of <
+            overlapping = e.start <= event.end && event.start <= e.end;
+        }
         if(e != event && e.valid && e.level == level && (overlapping)){
             return sortThisEvent(dataList, event, level + 1);
         }
@@ -456,9 +471,16 @@ function getEvents(ownPath: string){
         
         start: tripletToValue(page["fc-date"]),
         end: tripletToValue(page["fc-end"]),
+        trueStart: tripletToValue(page["fc-date"]), // also easier to have these numbers not shifted in an array
+        trueEnd: tripletToValue(page["fc-end"]), // since we artifically elongate too short ones, we need to remember what the true end is
         
         level: page.level == null ? -1 : page.level,
         valid: page.level == null ? false : true,
+        }
+
+        // do not let 0 length events not display, forcibly make them longer.
+        if (Math.abs(Math.abs(Number(dataObject.start)) - Math.abs(Number(dataObject.end))) < MIN_EVENT_RANGE){
+            dataObject.end = Number(dataObject.start) + MIN_EVENT_RANGE;
         }
         
         dataList.push(dataObject);
@@ -479,6 +501,8 @@ function eventsToData(list : EventType[]){
         var dataObject = {
             label: event.eventName,
             data: range_to_data_lvl([event.start,event.end], event.level),
+            trueStart: event.trueStart,
+            trueEnd: event.trueEnd,
             fill: false,
             backgroundColor: getBarColor(),
             datalabels: {
@@ -510,7 +534,7 @@ function levels_var_to_array(){
 }
 
 export function getTimeline(ownPath: string) {
-    updateVars();
+    updateVars(ownPath);
     var Events = getEvents(ownPath);
     var EventsData = eventsToData(Events);
     var levels = levels_var_to_array();
@@ -634,6 +658,9 @@ export function getTimeline(ownPath: string) {
                 tooltip: {
                     callbacks: {
                         label: function(context) {
+                            var start = context.dataset.trueStart;
+                            var end = context.dataset.trueEnd;
+                            return context.chart.getDateNumberString(start) + " - " + context.chart.getDateNumberString(end);
                             var range = [0,1000];
                             for(let thisData of context.dataset.data) if (thisData != null) range = thisData;
                             return context.chart.getDateNumberString(range[0]) + " - " + context.chart.getDateNumberString(range[1]);
