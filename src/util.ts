@@ -352,7 +352,7 @@ var year_value  = 336;
 var month_value = 28;
 var week_value  = 7;
 var day_value   = 1;
-var MIN_EVENT_RANGE = 0.1;
+var MIN_BAR_LENGTH = 0.1;
 
 function updateVars(ownPath: string){
     var myMonths : string[] = [];
@@ -380,8 +380,8 @@ function updateVars(ownPath: string){
     week_value = myData.calendars[0].static.weekdays.length;
     day_value = 1;
 
-    if (dv.page(ownPath).MIN_EVENT_RANGE != null){
-        MIN_EVENT_RANGE = dv.page(ownPath).MIN_EVENT_RANGE;
+    if (dv.page(ownPath).MIN_BAR_LENGTH != null){
+        MIN_BAR_LENGTH = dv.page(ownPath).MIN_BAR_LENGTH;
     }
 
     return;
@@ -406,11 +406,7 @@ function range_to_data_lvl(range:[number, number], level: number){
     
     var start: number = range[0];
     var end: number = range[1];
-
-    // // do not let 0 length events not display, forcibly make them longer.
-    // if (Math.abs(range[1] - range[0]) < MIN_EVENT_RANGE){
-    //     end = Number(range[0] + MIN_EVENT_RANGE);
-    // }
+    
     myData.push([start, end]);
     return myData;
 }
@@ -479,9 +475,9 @@ function getEvents(ownPath: string){
         }
 
         // do not let 0 length events not display, forcibly make them longer.
-        if (Math.abs(Math.abs(Number(dataObject.start)) - Math.abs(Number(dataObject.end))) < MIN_EVENT_RANGE){
-            dataObject.end = Number(dataObject.start) + MIN_EVENT_RANGE;
-        }
+        // if (Math.abs(Math.abs(Number(dataObject.start)) - Math.abs(Number(dataObject.end))) < MIN_BAR_LENGTH){
+        //     dataObject.end = Number(dataObject.start) + MIN_BAR_LENGTH;
+        // }
         
         dataList.push(dataObject);
     }
@@ -508,7 +504,8 @@ function eventsToData(list : EventType[]){
             datalabels: {
                 align: 'center',
                 anchor: 'center',
-            }
+            },
+            minBarLength: MIN_BAR_LENGTH,
         };
         dataListObject.push(dataObject);
     }
