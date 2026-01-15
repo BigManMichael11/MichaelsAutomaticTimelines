@@ -22,6 +22,16 @@ export function renderError(error: any, el: HTMLElement) {
     errorEl.createEl("span").innerHTML = "You might also want to look for further Errors in the Console: Press <kbd>CTRL</kbd> + <kbd>SHIFT</kbd> + <kbd>I</kbd> to open it.";
 }
 
+const CHART_SCALE_MIN = 1;
+const CHART_SCALE_MAX = 14;
+
+var chartSize: ChartSize = null;
+
+type ChartSize = {
+    widthpx: number,
+    heightpx: number,
+    widthValue: number,
+}
 
 type EventType = {
     timeline: string[],
@@ -112,8 +122,7 @@ export class chartTimeline extends Chart{
             this.moons.push(moon);
         }
 
-        
-        
+        // chartSize = {widthpx: context.canvas.clientWidth, heightpx: context.canvas.clientHeight, widthValue: (Math.abs(this.getInitialScaleBounds().x.max - this.getInitialScaleBounds().x.min))};        
     }
 
     chartBounds() : {x: {min: number, max: number}, y: {min: number, max: number}} | undefined{
@@ -352,7 +361,7 @@ var year_value  = 336;
 var month_value = 28;
 var week_value  = 7;
 var day_value   = 1;
-var MIN_BAR_LENGTH = 0.1;
+var MIN_BAR_LENGTH = 1;
 
 function updateVars(ownPath: string){
     var myMonths : string[] = [];
@@ -420,6 +429,26 @@ function sortThisEvent(dataList: EventType[], event: EventType, level: number){
             // if event is 0 length, check for <= instead of <
             overlapping = e.start <= event.end && event.start <= e.end;
         }
+        if (chartSize != null){
+            var pixelPerValue = chartSize.widthpx / chartSize.widthValue;
+            var minOverlapValue = MIN_BAR_LENGTH / pixelPerValue;
+
+            var localStart1 = e.start     - minOverlapValue;
+            var localEnd1   = e.start     + minOverlapValue;
+            var localStart2 = event.start - minOverlapValue;
+            var localEnd2   = event.start + minOverlapValue;
+
+            if (localStart1 < localEnd2 && localStart2 < localEnd1){
+                // if (event.start < 10 && e.start < 10){
+                //     console.log(e.start, e.end, event.start, event.end);
+                //     console.log(localStart1, localEnd1, localStart2, localEnd2);
+                //     console.log("minOverlapValue:", minOverlapValue, "pixelPerValue:", pixelPerValue);
+                // }
+
+                overlapping = true;
+            }
+            
+        }
         if(e != event && e.valid && e.level == level && (overlapping)){
             return sortThisEvent(dataList, event, level + 1);
         }
@@ -473,11 +502,6 @@ function getEvents(ownPath: string){
         level: page.level == null ? -1 : page.level,
         valid: page.level == null ? false : true,
         }
-
-        // do not let 0 length events not display, forcibly make them longer.
-        // if (Math.abs(Math.abs(Number(dataObject.start)) - Math.abs(Number(dataObject.end))) < MIN_BAR_LENGTH){
-        //     dataObject.end = Number(dataObject.start) + MIN_BAR_LENGTH;
-        // }
         
         dataList.push(dataObject);
     }
@@ -530,7 +554,8 @@ function levels_var_to_array(){
     return myStrings;
 }
 
-export function getTimeline(ownPath: string) {
+export function getTimeline(ownPath: string, initialChartSizepx) {
+    chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  CHART_SCALE_MAX - CHART_SCALE_MIN};
     updateVars(ownPath);
     var Events = getEvents(ownPath);
     var EventsData = eventsToData(Events);
@@ -550,8 +575,8 @@ export function getTimeline(ownPath: string) {
                     stacked: true,
                 },
                 x: {
-                    min: 1,
-                    max: 14,
+                    min: CHART_SCALE_MIN,
+                    max: CHART_SCALE_MAX,
                     ticks: {
                         autoSkip: true,
                         autoSkipPadding: 5,
@@ -598,15 +623,16 @@ export function getTimeline(ownPath: string) {
             },
             plugins: {
                 zoom: {
-                    onPan: function (context){
-                        context.chart.updateScaleHeight();
-                        context.chart.updateScaleHeightBox();
-                        context.chart.update();
-                    },
                     pan: {
                         threshold: 10,
                         enabled: true,
                         mode: 'xy',
+                        onPan: function (context){
+                            // console.log("Panned: ")
+                            context.chart.updateScaleHeight();
+                            context.chart.updateScaleHeightBox();
+                            context.chart.update();
+                        },
                     },
                     limits: {
                         x: {
@@ -624,6 +650,18 @@ export function getTimeline(ownPath: string) {
                             modifierKey: 'ctrl',
                         },
                         scaleMode: 'xy',
+                        onZoom: function (context){
+                            // Slow right now, update later to only update the level of each dataset instead of rewriting all
+                            // updateVars(ownPath);
+                            chartSize = {widthpx: context.chart.width, heightpx: context.chart.height, widthValue: context.chart.chartXRangeDiff()};
+                            var Events = getEvents(ownPath);
+                            var EventsData = eventsToData(Events);
+                            var levels = levels_var_to_array();
+
+                            context.chart.data.datasets = EventsData;
+                            context.chart.data.labels = levels;
+                            context.chart.update();
+                        },
                     },
                 },
                 datalabels: {

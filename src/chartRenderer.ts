@@ -24,11 +24,13 @@ export default class Renderer {
 
     renderTimeline(data: any, el: HTMLElement, ownPath: string): chartTimeline {
         const destination = el.createEl('canvas');
+        // console.log(destination.getContext("2d"));
         //let chart = new Chart(destination.getContext("2d"), getTimeline());
-        let chart = new chartTimeline(destination.getContext("2d"), getTimeline(ownPath), myData.calendars[0], this.plugin, ownPath);
+        var chartSizepx = {widthpx: destination.clientWidth, heightpx: destination.clientHeight};
+        let chart = new chartTimeline(destination.getContext("2d"), getTimeline(ownPath, chartSizepx), myData.calendars[0], this.plugin, ownPath);
 
 
-        chart.updateScaleHeight();
+        chart.updateScaleHeight();s
         chart.updateScaleHeightBox();
         chart.update();
 
@@ -76,6 +78,7 @@ class ChartRenderChild extends MarkdownRenderChild {
 
     async onload() {
         try {
+            // console.log("Rendering timeline for ", this.containerEl);
             this.chart = this.renderer.renderTimeline(this.data, this.containerEl, this.ownPath);
         } catch (error) {
             renderError(error, this.el);
