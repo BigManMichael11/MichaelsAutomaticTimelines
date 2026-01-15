@@ -424,6 +424,7 @@ function range_to_data_lvl(range:[number, number], level: number){
 
 function sortThisEvent(dataList: EventType[], event: EventType, level: number){
     for(let e of dataList){
+        if (e == event) continue;
         var overlapping = e.start < event.end && event.start < e.end;
         if (Math.abs(event.start) - Math.abs(event.end) == 0){
             // if event is 0 length, check for <= instead of <
@@ -438,18 +439,27 @@ function sortThisEvent(dataList: EventType[], event: EventType, level: number){
             var localStart2 = event.start - minOverlapValue;
             var localEnd2   = event.start + minOverlapValue;
 
+            // if (event.end < 10 && e.end < 10){
+            //     console.log(e.start, e.end, event.start, event.end);
+            //     console.log(localStart1, localEnd1, localStart2, localEnd2);
+            //     // console.log("minOverlapValue:", minOverlapValue, "pixelPerValue:", pixelPerValue);
+            //     console.log( localStart1 < localEnd2, localStart2 < localEnd1);
+            // }
+
+            
+
             if (localStart1 < localEnd2 && localStart2 < localEnd1){
-                // if (event.start < 10 && e.start < 10){
-                //     console.log(e.start, e.end, event.start, event.end);
-                //     console.log(localStart1, localEnd1, localStart2, localEnd2);
-                //     console.log("minOverlapValue:", minOverlapValue, "pixelPerValue:", pixelPerValue);
-                // }
+                if (event.end < 10 && e.end < 10){
+                    console.log(e.start, e.end, event.start, event.end);
+                    console.log(localStart1, localEnd1, localStart2, localEnd2);
+                    console.log("minOverlapValue:", minOverlapValue, "pixelPerValue:", pixelPerValue);
+                }
 
                 overlapping = true;
             }
             
         }
-        if(e != event && e.valid && e.level == level && (overlapping)){
+        if(e.level == level && (overlapping)){
             return sortThisEvent(dataList, event, level + 1);
         }
     }
@@ -462,16 +472,15 @@ function compareElements(a:{start: number, end: number}, b:{start: number, end: 
     return (b.end - b.start) - (a.end - a.start);
 }
 
-function sortEvents(datalist: EventType[]){
-    var localDataList = datalist.sort(compareElements);
-    
+function sortEvents(datalist){
+    var localDataList = datalist.sort(compareElements);    
     for(let i = 0; i < localDataList.length; i++){
         if(localDataList[i].level > max_levels) max_levels = localDataList[i].level;
-        if(localDataList[i].level < 0){
+        // if(localDataList[i].level < 0){
             var event = localDataList[i];
             localDataList[i].level = sortThisEvent(localDataList, event, 1);
-        }
-        localDataList[i].valid = true;
+        // }
+        // localDataList[i].valid = true;
     }
     
     return localDataList;
@@ -505,7 +514,8 @@ function getEvents(ownPath: string){
         
         dataList.push(dataObject);
     }
-    return sortEvents(dataList);
+    return dataList;
+    // return sortEvents(dataList);
 }
 
 function tripletToValue(string: string) : number {
@@ -515,14 +525,16 @@ function tripletToValue(string: string) : number {
 }
 
 
-function eventsToData(list : EventType[]){			
+function eventsToData(list){			
     var dataListObject = [];
+    list = sortEvents(list);
     for(const event of list){
         var dataObject = {
             label: event.eventName,
             data: range_to_data_lvl([event.start,event.end], event.level),
-            trueStart: event.trueStart,
-            trueEnd: event.trueEnd,
+            start: event.trueStart,
+            end: event.trueEnd,
+            level: event.level,
             fill: false,
             backgroundColor: getBarColor(),
             datalabels: {
@@ -554,7 +566,7 @@ function levels_var_to_array(){
     return myStrings;
 }
 
-export function getTimeline(ownPath: string, initialChartSizepx) {
+export function getTimeline(ownPath: string, initialChartSizepx: {widthpx: number, heightpx: number}) {
     chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  CHART_SCALE_MAX - CHART_SCALE_MIN};
     updateVars(ownPath);
     var Events = getEvents(ownPath);
@@ -652,19 +664,15 @@ export function getTimeline(ownPath: string, initialChartSizepx) {
                         scaleMode: 'xy',
                         onZoom: function (context){
                             // Slow right now, update later to only update the level of each dataset instead of rewriting all
-                            // updateVars(ownPath);
                             chartSize = {widthpx: context.chart.width, heightpx: context.chart.height, widthValue: context.chart.chartXRangeDiff()};
-                            // var Events = getEvents(ownPath);
-                            var EventsData = eventsToData(Events);
-                            // context.chart.data.datasets = EventsData;
-                            // for (let i = 0; i < context.chart.data.datasets.length; i++){
-                            //     context.chart.data.datasets[i].data = EventsData[i].data;
-                            // }
-                            var localDatset = sortEvents(context.chart.data.datasets);
-                            context.chart.data.datasets = localDatset;
-
+                            var tmpDataSet = sortEvents(context.chart.data.datasets); //only updated levl numbers, still need to remake data
+                            console.log(tmpDataSet);
+                            for(let i = 0; i < tmpDataSet.length; i++){
+                                tmpDataSet[i].data = range_to_data_lvl([tmpDataSet[i].start,tmpDataSet[i].end], tmpDataSet[i].level);
+                            }
+                            context.chart.data.datasets = tmpDataSet;   
                             var levels = levels_var_to_array();
-                            if (levels.length != context.chart.data.labels.length) context.chart.data.labels = levels;
+                            context.chart.data.labels = levels;
                             context.chart.update();
                         },
                     },
@@ -698,8 +706,8 @@ export function getTimeline(ownPath: string, initialChartSizepx) {
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            var start = context.dataset.trueStart;
-                            var end = context.dataset.trueEnd;
+                            var start = context.dataset.start;
+                            var end = context.dataset.end;
                             return context.chart.getDateNumberString(start) + " - " + context.chart.getDateNumberString(end);
                             var range = [0,1000];
                             for(let thisData of context.dataset.data) if (thisData != null) range = thisData;
