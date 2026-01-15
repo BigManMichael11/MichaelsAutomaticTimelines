@@ -30,7 +30,7 @@ export default class Renderer {
         let chart = new chartTimeline(destination.getContext("2d"), getTimeline(ownPath, chartSizepx), myData.calendars[0], this.plugin, ownPath);
 
 
-        chart.updateScaleHeight();s
+        chart.updateScaleHeight();
         chart.updateScaleHeightBox();
         chart.update();
 

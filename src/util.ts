@@ -654,12 +654,17 @@ export function getTimeline(ownPath: string, initialChartSizepx) {
                             // Slow right now, update later to only update the level of each dataset instead of rewriting all
                             // updateVars(ownPath);
                             chartSize = {widthpx: context.chart.width, heightpx: context.chart.height, widthValue: context.chart.chartXRangeDiff()};
-                            var Events = getEvents(ownPath);
+                            // var Events = getEvents(ownPath);
                             var EventsData = eventsToData(Events);
-                            var levels = levels_var_to_array();
+                            // context.chart.data.datasets = EventsData;
+                            // for (let i = 0; i < context.chart.data.datasets.length; i++){
+                            //     context.chart.data.datasets[i].data = EventsData[i].data;
+                            // }
+                            var localDatset = sortEvents(context.chart.data.datasets);
+                            context.chart.data.datasets = localDatset;
 
-                            context.chart.data.datasets = EventsData;
-                            context.chart.data.labels = levels;
+                            var levels = levels_var_to_array();
+                            if (levels.length != context.chart.data.labels.length) context.chart.data.labels = levels;
                             context.chart.update();
                         },
                     },
