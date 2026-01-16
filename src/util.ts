@@ -121,8 +121,6 @@ export class chartTimeline extends Chart{
         for (let moon of calendar.static.moons){
             this.moons.push(moon);
         }
-
-        // chartSize = {widthpx: context.canvas.clientWidth, heightpx: context.canvas.clientHeight, widthValue: (Math.abs(this.getInitialScaleBounds().x.max - this.getInitialScaleBounds().x.min))};        
     }
 
     chartBounds() : {x: {min: number, max: number}, y: {min: number, max: number}} | undefined{
@@ -430,17 +428,26 @@ function sortThisEvent(dataList, event, level: number){
             // if event is 0 length, check for <= instead of <
             overlapping = e.start <= event.end && event.start <= e.end;
         }
+
         if (chartSize != null){
             var pixelPerValue = chartSize.widthpx / chartSize.widthValue;
             var minOverlapValue = MIN_BAR_LENGTH / pixelPerValue;
 
-            var localStart1 = Math.sign(e.start) * Math.abs(e.start)         - minOverlapValue;
-            var localEnd1   = Math.sign(e.start) * Math.abs(e.start)         + minOverlapValue;
-            localEnd1 = Math.max(localEnd1, e.end);
-            var localStart2 = Math.sign(event.start) * Math.abs(event.start) - minOverlapValue;
-            var localEnd2   = Math.sign(event.start) * Math.abs(event.start) + minOverlapValue;
-            localEnd2 = Math.max(localEnd2, event.end);            
+            var localStart1 = e.start;
+            var localEnd1 = e.end;
+            var localStart2 = event.start;
+            var localEnd2 = event.end;
 
+            if (e.end - e.start < minOverlapValue){
+                localStart1 = Math.sign(e.start) * Math.abs(e.start)         - minOverlapValue;
+                localEnd1   = Math.sign(e.start) * Math.abs(e.start)         + minOverlapValue;
+            }
+
+            if (event.end - event.start < minOverlapValue){
+                localStart2 = Math.sign(event.start) * Math.abs(event.start) - minOverlapValue;
+                localEnd2   = Math.sign(event.start) * Math.abs(event.start) + minOverlapValue;
+            }
+            // localEnd2 = Math.max(localEnd2, event.end);
             if (localStart1 < localEnd2 && localStart2 < localEnd1){
                 overlapping = true;
             }
@@ -461,7 +468,8 @@ function compareElements(a:{start: number, end: number}, b:{start: number, end: 
 
 function sortEvents(datalist){
     max_levels = 0;
-    var localDataList = datalist.sort(compareElements);    
+    var localDataList = datalist.sort(compareElements);
+    for(let i = 0; i < localDataList.length; i++){localDataList[i].level = 0;}
     for(let i = 0; i < localDataList.length; i++){
         // if(localDataList[i].level > max_levels) max_levels = localDataList[i].level;
         // if(localDataList[i].level < 0){
@@ -469,7 +477,6 @@ function sortEvents(datalist){
         // }
         // localDataList[i].valid = true;
     }
-    
     return localDataList;
 }
 
@@ -562,8 +569,13 @@ function levels_var_to_array(){
 export function getTimeline(ownPath: string, initialChartSizepx: {widthpx: number, heightpx: number}) {
     updateVars(ownPath);
     var Events = getEvents(ownPath);
-    //chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  CHART_SCALE_MAX - CHART_SCALE_MIN};
-    chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  latestEvent - earliestEvent};
+    if (chartSize == null){
+        chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  CHART_SCALE_MAX - CHART_SCALE_MIN};
+    } else {
+        chartSize.widthValue = CHART_SCALE_MAX - CHART_SCALE_MIN;
+    }
+    
+    // chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  latestEvent - earliestEvent};
     var EventsData = eventsToData(Events);
     var levels = levels_var_to_array();
 
