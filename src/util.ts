@@ -408,8 +408,8 @@ function getBarColor(){
 }
 
 function range_to_data_lvl(range:[number, number], level: number){
-    var myData = [];
-    for (let i = 0 ; i < (level - 1); i++) myData.push(null);
+    var myData = Array(level - 1).fill(null);
+    // for (let i = 0 ; i < (level - 1); i++) myData.push(null);
     
     var start: number = range[0];
     var end: number = range[1];
@@ -420,41 +420,44 @@ function range_to_data_lvl(range:[number, number], level: number){
 
 
 
-function sortThisEvent(dataList, event, level: number){
+function sortThisEvent(dataList, event, levelParam: number){
+    var level = levelParam;
     for(let e of dataList){
         if (e == event) continue;
-        var overlapping = e.start < event.end && event.start < e.end;
-        if (Math.abs(event.start) - Math.abs(event.end) == 0){
-            // if event is 0 length, check for <= instead of <
-            overlapping = e.start <= event.end && event.start <= e.end;
-        }
-
-        if (chartSize != null){
-            var pixelPerValue = chartSize.widthpx / chartSize.widthValue;
-            var minOverlapValue = MIN_BAR_LENGTH / pixelPerValue;
-
-            var localStart1 = e.start;
-            var localEnd1 = e.end;
-            var localStart2 = event.start;
-            var localEnd2 = event.end;
-
-            if (e.end - e.start < minOverlapValue){
-                localStart1 = Math.sign(e.start) * Math.abs(e.start)         - minOverlapValue;
-                localEnd1   = Math.sign(e.start) * Math.abs(e.start)         + minOverlapValue;
+        if(e.level == level) {
+            var overlapping = e.start < event.end && event.start < e.end;
+            if (Math.abs(event.start) - Math.abs(event.end) == 0){
+                // if event is 0 length, check for <= instead of <
+                overlapping = e.start <= event.end && event.start <= e.end;
             }
 
-            if (event.end - event.start < minOverlapValue){
-                localStart2 = Math.sign(event.start) * Math.abs(event.start) - minOverlapValue;
-                localEnd2   = Math.sign(event.start) * Math.abs(event.start) + minOverlapValue;
-            }
-            // localEnd2 = Math.max(localEnd2, event.end);
-            if (localStart1 < localEnd2 && localStart2 < localEnd1){
-                overlapping = true;
-            }
-        }
+            if (chartSize != null && overlapping == false){
+                var pixelPerValue = chartSize.widthpx / chartSize.widthValue;
+                var minOverlapValue = MIN_BAR_LENGTH / pixelPerValue;
 
-        if(e.level == level && (overlapping)){
-            return sortThisEvent(dataList, event, level + 1);
+                var localStart1 = e.start;
+                var localEnd1 = e.end;
+                var localStart2 = event.start;
+                var localEnd2 = event.end;
+
+                if (e.end - e.start < minOverlapValue){
+                    localStart1 = Math.sign(e.start) * Math.abs(e.start)         - minOverlapValue;
+                    localEnd1   = Math.sign(e.start) * Math.abs(e.start)         + minOverlapValue;
+                }
+
+                if (event.end - event.start < minOverlapValue){
+                    localStart2 = Math.sign(event.start) * Math.abs(event.start) - minOverlapValue;
+                    localEnd2   = Math.sign(event.start) * Math.abs(event.start) + minOverlapValue;
+                }
+                // localEnd2 = Math.max(localEnd2, event.end);
+                if (localStart1 < localEnd2 && localStart2 < localEnd1){
+                    overlapping = true;
+                }
+            }
+
+            if(e.level == level && (overlapping)){
+                return sortThisEvent(dataList, event, level + 1);
+            }
         }
     }
     
@@ -469,7 +472,7 @@ function compareElements(a:{start: number, end: number}, b:{start: number, end: 
 function sortEvents(datalist){
     max_levels = 0;
     var localDataList = datalist.sort(compareElements);
-    for(let i = 0; i < localDataList.length; i++){localDataList[i].level = 0;}
+    // for(let i = 0; i < localDataList.length; i++){localDataList[i].level = 0;}
     for(let i = 0; i < localDataList.length; i++){
         // if(localDataList[i].level > max_levels) max_levels = localDataList[i].level;
         // if(localDataList[i].level < 0){
@@ -558,13 +561,234 @@ function hex2rgb(hex: string) {
     return { r, g, b };
 }
 
+const LEVELS_STRING_ARRAY = [
+"Level: 1",
+"Level: 2",
+"Level: 3",
+"Level: 4",
+"Level: 5",
+"Level: 6",
+"Level: 7",
+"Level: 8",
+"Level: 9",
+"Level: 10",
+"Level: 11",
+"Level: 12",
+"Level: 13",
+"Level: 14",
+"Level: 15",
+"Level: 16",
+"Level: 17",
+"Level: 18",
+"Level: 19",
+"Level: 20",
+"Level: 21",
+"Level: 22",
+"Level: 23",
+"Level: 24",
+"Level: 25",
+"Level: 26",
+"Level: 27",
+"Level: 28",
+"Level: 29",
+"Level: 30",
+"Level: 31",
+"Level: 32",
+"Level: 33",
+"Level: 34",
+"Level: 35",
+"Level: 36",
+"Level: 37",
+"Level: 38",
+"Level: 39",
+"Level: 40",
+"Level: 41",
+"Level: 42",
+"Level: 43",
+"Level: 44",
+"Level: 45",
+"Level: 46",
+"Level: 47",
+"Level: 48",
+"Level: 49",
+"Level: 50",
+"Level: 51",
+"Level: 52",
+"Level: 53",
+"Level: 54",
+"Level: 55",
+"Level: 56",
+"Level: 57",
+"Level: 58",
+"Level: 59",
+"Level: 60",
+"Level: 61",
+"Level: 62",
+"Level: 63",
+"Level: 64",
+"Level: 65",
+"Level: 66",
+"Level: 67",
+"Level: 68",
+"Level: 69",
+"Level: 70",
+"Level: 71",
+"Level: 72",
+"Level: 73",
+"Level: 74",
+"Level: 75",
+"Level: 76",
+"Level: 77",
+"Level: 78",
+"Level: 79",
+"Level: 80",
+"Level: 81",
+"Level: 82",
+"Level: 83",
+"Level: 84",
+"Level: 85",
+"Level: 86",
+"Level: 87",
+"Level: 88",
+"Level: 89",
+"Level: 90",
+"Level: 91",
+"Level: 92",
+"Level: 93",
+"Level: 94",
+"Level: 95",
+"Level: 96",
+"Level: 97",
+"Level: 98",
+"Level: 99"
+];
+
 function levels_var_to_array(){
-    var myStrings = [];
-    for (let i = 0 ; i < max_levels; i++){
-        myStrings.push("Level: " + i);
-    }
-    return myStrings;
+    return LEVELS_STRING_ARRAY.slice(0, max_levels);
 }
+
+type ClickCallback = {
+    bounds: {top: number, bottom: number, left: number, right: number},
+    callback: (ctx, click) => void,
+}
+
+var ZOOM_BUTTON_PLUS_IDX: number = null;
+var ZOOM_BUTTON_MINUS_IDX: number = null;
+let clickButtonCallbacks: ClickCallback[] = [];
+
+const zoomButton =  {
+    id: 'zoomButton',
+    beforeDraw(chart, args, options) {
+        const {ctx, chartArea: {top, right, bottom, left, width, height}} = chart;
+        ctx.save();
+
+        ctx.font = '16px Arial';
+        const plusText = '+';
+        const plusTextWidth = ctx.measureText(plusText).width;
+        const plusTextHeight = 16 / 2; //for 16px
+        const minusTextHeight = 16 / 4; //for 16px
+        const minusText = '-';
+        const minusTextWidth = ctx.measureText(minusText).width;
+
+        var buttonCoordinatesPlus = {
+            top: 10,
+            bottom: 30  ,
+            left: right - (plusTextWidth + 5),
+            right: right,
+        };
+        var buttonCoordinatesMinus = {
+            top: 10,
+            bottom: 30  ,
+            left: right - (plusTextWidth + 5) - (plusTextWidth + 5),
+            right: right - (plusTextWidth + 5),
+        };
+
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+        ctx.fillRect(buttonCoordinatesPlus.left, buttonCoordinatesPlus.top, buttonCoordinatesPlus.right - buttonCoordinatesPlus.left, buttonCoordinatesPlus.bottom - buttonCoordinatesPlus.top);
+        ctx.fillRect(buttonCoordinatesMinus.left, buttonCoordinatesMinus.top, buttonCoordinatesMinus.right - buttonCoordinatesMinus.left, buttonCoordinatesMinus.bottom - buttonCoordinatesMinus.top);
+        
+        ctx.strokeStyle = 'rgba(14, 113, 226, 0.2)';
+        ctx.strokeRect(buttonCoordinatesPlus.left, buttonCoordinatesPlus.top, buttonCoordinatesPlus.right - buttonCoordinatesPlus.left, buttonCoordinatesPlus.bottom - buttonCoordinatesPlus.top);
+        ctx.strokeRect(buttonCoordinatesMinus.left, buttonCoordinatesMinus.top, buttonCoordinatesMinus.right - buttonCoordinatesMinus.left, buttonCoordinatesMinus.bottom - buttonCoordinatesMinus.top);
+
+        ctx.fillStyle = '#377fd1ff';
+        ctx.textAlign = 'center';
+
+        var plusCenterX = buttonCoordinatesPlus.left + (buttonCoordinatesPlus.right - buttonCoordinatesPlus.left)/2;
+        var plusCenterY = buttonCoordinatesPlus.top + (buttonCoordinatesPlus.bottom - buttonCoordinatesPlus.top)/2 + plusTextHeight/2;
+        ctx.fillText(plusText, plusCenterX, plusCenterY);
+
+        var minusCenterX = buttonCoordinatesMinus.left + (buttonCoordinatesMinus.right - buttonCoordinatesMinus.left)/2;
+        var minusCenterY = buttonCoordinatesMinus.top + (buttonCoordinatesMinus.bottom - buttonCoordinatesMinus.top)/2 + minusTextHeight/2;
+        ctx.fillText(minusText, minusCenterX, minusCenterY);
+
+        if (ZOOM_BUTTON_PLUS_IDX == null){
+            clickButtonCallbacks.push({bounds: buttonCoordinatesPlus, callback: zoomButtonPlusCallback});
+            ZOOM_BUTTON_PLUS_IDX = clickButtonCallbacks.length - 1;
+            console.log(clickButtonCallbacks);
+        } else {
+            clickButtonCallbacks[ZOOM_BUTTON_PLUS_IDX] = {bounds: buttonCoordinatesPlus, callback: zoomButtonPlusCallback};
+        }
+
+        if (ZOOM_BUTTON_MINUS_IDX == null){
+            clickButtonCallbacks.push({bounds: buttonCoordinatesMinus, callback: zoomButtonMinusCallback});
+            ZOOM_BUTTON_MINUS_IDX = clickButtonCallbacks.length - 1;
+            console.log(clickButtonCallbacks);
+        } else {
+            clickButtonCallbacks[ZOOM_BUTTON_MINUS_IDX] = {bounds: buttonCoordinatesMinus, callback: zoomButtonMinusCallback};
+        }
+
+        ctx.restore();
+    }
+};
+
+const ZOOM_INCREMENT_SMALL = 1.5;
+const ZOOM_INCREMENT_LARGE = 2;
+
+function zoomButtonPlusCallback(ctx, click){
+    let zoomAmount: number = ZOOM_INCREMENT_SMALL;
+    if(click.altKey) zoomAmount = ZOOM_INCREMENT_LARGE;
+    ctx.zoom({x: zoomAmount, y: 0});
+}
+
+function zoomButtonMinusCallback(ctx, click){    
+    let zoomAmount: number = 1/(ZOOM_INCREMENT_SMALL * 2);
+    if(click.altKey) zoomAmount = 1/(ZOOM_INCREMENT_LARGE * 2);
+    ctx.zoom({x: zoomAmount, y: 0});
+}
+
+
+
+export function clickButtonHandler(ctx, click, chart){
+    // console.log(click.offsetX, click.offsetY);
+
+    for (let i = 0; i < clickButtonCallbacks.length; i++){
+        if(click.offsetX >= clickButtonCallbacks[i].bounds.left &&
+            click.offsetX <= clickButtonCallbacks[i].bounds.right &&
+            click.offsetY >= clickButtonCallbacks[i].bounds.top &&
+            click.offsetY <= clickButtonCallbacks[i].bounds.bottom
+        ){
+            clickButtonCallbacks[i].callback(chart, click);
+            // return;
+        }
+    }
+
+    // clickButtonCallbacks.ZOOM_BUTTON.callback(ctx, click);
+};
+
+function delayedZoomFunction(context){
+    chartSize = {widthpx: context.chart.width, heightpx: context.chart.height, widthValue: context.chart.chartXRangeDiff()};
+    var tmpDataSet = sortEvents(context.chart.data.datasets); //only updated level numbers, still need to remake data
+    for(let i = 0; i < tmpDataSet.length; i++){
+        tmpDataSet[i].data = range_to_data_lvl([tmpDataSet[i].start,tmpDataSet[i].end], tmpDataSet[i].level);
+    }
+
+    context.chart.data.datasets = tmpDataSet;   
+    context.chart.data.labels = levels_var_to_array();
+    context.chart.update();
+}
+
+var lastZoomUpdate: number = 0;
 
 export function getTimeline(ownPath: string, initialChartSizepx: {widthpx: number, heightpx: number}) {
     updateVars(ownPath);
@@ -585,6 +809,7 @@ export function getTimeline(ownPath: string, initialChartSizepx: {widthpx: numbe
             labels: levels,
             datasets: EventsData,
         },
+        plugins: [zoomButton],
         options: {
             responsive: true,
             indexAxis: 'y',
@@ -667,17 +892,11 @@ export function getTimeline(ownPath: string, initialChartSizepx: {widthpx: numbe
                             modifierKey: 'ctrl',
                         },
                         scaleMode: 'xy',
-                        onZoom: function (context){
-                            // Slow right now, update later to only update the level of each dataset instead of rewriting all
-                            chartSize = {widthpx: context.chart.width, heightpx: context.chart.height, widthValue: context.chart.chartXRangeDiff()};
-                            var tmpDataSet = sortEvents(context.chart.data.datasets); //only updated levl numbers, still need to remake data
-                            for(let i = 0; i < tmpDataSet.length; i++){
-                                tmpDataSet[i].data = range_to_data_lvl([tmpDataSet[i].start,tmpDataSet[i].end], tmpDataSet[i].level);
+                        onZoomComplete: function (context){
+                            if (Date.now() >= lastZoomUpdate + 500 || lastZoomUpdate == 0){
+                                setTimeout(delayedZoomFunction(context), 500);
+                                lastZoomUpdate = Date.now();
                             }
-                            context.chart.data.datasets = tmpDataSet;   
-                            var levels = levels_var_to_array();
-                            context.chart.data.labels = levels;
-                            context.chart.update();
                         },
                     },
                 },
@@ -762,11 +981,12 @@ export function getTimeline(ownPath: string, initialChartSizepx: {widthpx: numbe
                         line_year: function(context){return context.chart.getLine(year_value, "rgba(107, 39, 196, 1)", context.chart);},
                         line_month: function(context){return context.chart.getLine(month_value, "rgba(79, 207, 216, 1)", context.chart);},*/
                     }
-                }
+                },
             },
             events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
             onClick: function(e, context, chart) {
                 // chart.myResetZoom();
+                // clickButtonHandler(context, e);
                 return;
                 testStringVar = "Clicked!";
                 //context.chart.resetZoom('active');

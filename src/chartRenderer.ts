@@ -5,7 +5,7 @@ import { renderError } from 'src/util';
 import type ChartPlugin from 'src/main';
 import annotationPlugin from 'chartjs-plugin-annotation'
 
-import { getTimeline } from 'src/util';
+import { getTimeline, clickButtonHandler } from 'src/util';
 
 import { getAPI } from "obsidian-dataview";
 const dv = getAPI();
@@ -28,7 +28,10 @@ export default class Renderer {
         //let chart = new Chart(destination.getContext("2d"), getTimeline());
         var chartSizepx = {widthpx: destination.clientWidth, heightpx: destination.clientHeight};
         let chart = new chartTimeline(destination.getContext("2d"), getTimeline(ownPath, chartSizepx), myData.calendars[0], this.plugin, ownPath);
-
+        const canvas = document.getElementById('myChart');
+        destination.addEventListener('click', (event) => {
+            clickButtonHandler(destination, event, chart);
+        });
 
         chart.updateScaleHeight();
         chart.updateScaleHeightBox();
