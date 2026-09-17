@@ -7,29 +7,28 @@ import {
   View,
   Notice,
   MarkdownPostProcessorContext,
-} from 'obsidian';
+} from "obsidian";
 
-import Renderer from './chartRenderer';
+import Renderer from "./chartRenderer";
 // import {
 //   ChartPluginSettings,
 // } from './constants/settingsConstants';
-import { renderError } from 'src/util';
+import { renderError } from "src/util";
 
+import { Chart } from "chart.js";
+import zoomPlugin from "chartjs-plugin-zoom";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 
-import { Chart } from 'chart.js';
-import zoomPlugin from 'chartjs-plugin-zoom';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
+import "chartjs-adapter-luxon";
 
-import 'chartjs-adapter-luxon';
-
-import { ExampleSettingTab } from './settings';
+import { ExampleSettingTab } from "./settings";
 
 export interface ExamplePluginSettings {
   sampleValue: string;
 }
 
 export const DEFAULT_SETTINGS: Partial<ExamplePluginSettings> = {
-  sampleValue: 'Lorem ipsum',
+  sampleValue: "Lorem ipsum",
 };
 
 Chart.register(zoomPlugin);
@@ -39,14 +38,13 @@ export default class ChartPlugin extends Plugin {
   renderer: Renderer;
   settings: ExamplePluginSettings;
 
-
   postprocessor = async (
     content: string,
     el: HTMLElement,
-    ctx: MarkdownPostProcessorContext
+    ctx: MarkdownPostProcessorContext,
   ) => {
-      await this.renderer.renderFromYaml({}, el, ctx)
-  }
+    await this.renderer.renderFromYaml({}, el, ctx);
+  };
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -57,7 +55,7 @@ export default class ChartPlugin extends Plugin {
   }
 
   async onload() {
-    console.log('loading plugin: Charts');
+    console.log("loading plugin: Charts");
 
     await this.loadSettings();
     this.addSettingTab(new ExampleSettingTab(this.app, this));
@@ -67,43 +65,16 @@ export default class ChartPlugin extends Plugin {
     //@ts-ignore
     //window.renderChart = this.renderer.renderTimeline;
 
-    this.registerMarkdownCodeBlockProcessor('chart', this.postprocessor.bind(this));
+    this.registerMarkdownCodeBlockProcessor(
+      "chart",
+      this.postprocessor.bind(this),
+    );
   }
 
   onunload() {
-    console.log('unloading plugin: Charts');
+    console.log("unloading plugin: Charts");
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /*
 import { Plugin, WorkspaceLeaf } from 'obsidian';

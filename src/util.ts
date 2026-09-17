@@ -1,25 +1,26 @@
 import type { App, Editor, TFile } from "obsidian";
 import type { ChartPluginSettings } from "src/constants/settingsConstants";
 import type Renderer from "src/chartRenderer";
-import type ChartPlugin from 'src/main';
-import {DEFAULT_SETTINGS, ExamplePluginSettings}  from 'src/main';
+import type ChartPlugin from "src/main";
+import { DEFAULT_SETTINGS, ExamplePluginSettings } from "src/main";
 
 import { getAPI } from "obsidian-dataview";
 
 const dv = getAPI();
 
 import myData from "../../calendarium/data.json";
- 
 
 //import { palettes, scales } from '@makio135/give-me-colors'
 
-
 export function renderError(error: any, el: HTMLElement) {
-    const errorEl = el.createDiv({ cls: "chart-error" });
-    errorEl.createEl("b", { text: "Couldn't render Chart:" });
-    errorEl.createEl("pre").createEl("code", { text: error.toString?.() ?? error });
-    errorEl.createEl("hr");
-    errorEl.createEl("span").innerHTML = "You might also want to look for further Errors in the Console: Press <kbd>CTRL</kbd> + <kbd>SHIFT</kbd> + <kbd>I</kbd> to open it.";
+  const errorEl = el.createDiv({ cls: "chart-error" });
+  errorEl.createEl("b", { text: "Couldn't render Chart:" });
+  errorEl
+    .createEl("pre")
+    .createEl("code", { text: error.toString?.() ?? error });
+  errorEl.createEl("hr");
+  errorEl.createEl("span").innerHTML =
+    "You might also want to look for further Errors in the Console: Press <kbd>CTRL</kbd> + <kbd>SHIFT</kbd> + <kbd>I</kbd> to open it.";
 }
 
 const CHART_SCALE_MIN = 1;
@@ -28,978 +29,1127 @@ const CHART_SCALE_MAX = 14;
 var chartSize: ChartSize = null;
 
 type ChartSize = {
-    widthpx: number,
-    heightpx: number,
-    widthValue: number,
-}
+  widthpx: number;
+  heightpx: number;
+  widthValue: number;
+};
 
 type EventType = {
-    timeline: string[],
-    eventName: string,
-    start: number,
-    end: number,
-    trueStart: number,
-    trueEnd: number,
-    level: number,
-    valid: boolean,
-}
+  timeline: string[];
+  eventName: string;
+  start: number;
+  end: number;
+  trueStart: number;
+  trueEnd: number;
+  level: number;
+  valid: boolean;
+};
 
 type weekType = {
-    name: string,
-    id: string,
-}
+  name: string;
+  id: string;
+};
 
 type monthType = {
-    name: string,
-    length: number,
-    id: string,
-    interval: number,
-    offset: number,
-}
+  name: string;
+  length: number;
+  id: string;
+  interval: number;
+  offset: number;
+};
 
 type seasonType = {
-    name: string,
-    type: string,
-    id: string,
+  name: string;
+  type: string;
+  id: string;
 
-    duration: number,
-    peak: number,
-    weatherOffset: number,
-    weatherPeak: number,
-}
+  duration: number;
+  peak: number;
+  weatherOffset: number;
+  weatherPeak: number;
+};
 
 type moonType = {
-    name: string,
-    cycle: number,
-    offset: number,
-    id: string,
+  name: string;
+  cycle: number;
+  offset: number;
+  id: string;
+};
+
+import { Chart } from "chart.js";
+
+export class chartTimeline extends Chart {
+  plugin: ChartPlugin;
+  //settings: ExamplePluginSettings = Object.assign({}, DEFAULT_SETTINGS);
+  name: string = "Default Name";
+  id: string = "";
+  weekOverflow: boolean = false;
+
+  weekdays: weekType[] = [];
+  months: monthType[] = [];
+  seasons: seasonType[] = [];
+  moons: moonType[] = [];
+
+  yearLength: number = 0;
+
+  currentYear: number = 0;
+  ownPath: string = "";
+
+  constructor(context, chartOptions, calendar, plugin, ownPath: string) {
+    super(context, chartOptions);
+
+    this.plugin = plugin;
+    this.name = calendar.name;
+    this.id = calendar.id;
+    this.weekOverflow = calendar.static.overflow;
+    this.ownPath = ownPath;
+
+    for (let day of calendar.static.weekdays) {
+      this.weekdays.push(day);
+    }
+
+    for (let month of calendar.static.months) {
+      this.yearLength += month.length;
+      this.months.push(month);
+    }
+
+    for (let season of calendar.seasonal.seasons) {
+      this.seasons.push(season);
+    }
+
+    for (let moon of calendar.static.moons) {
+      this.moons.push(moon);
+    }
+  }
+
+  chartBounds():
+    | { x: { min: number; max: number }; y: { min: number; max: number } }
+    | undefined {
+    var bounds = this.isZoomedOrPanned()
+      ? this.getZoomedScaleBounds()
+      : this.getInitialScaleBounds();
+    if (bounds == null || bounds.x == null || bounds.y == null)
+      return { x: { min: 0, max: 100 }, y: { min: 0, max: 100 } };
+
+    if (bounds.y.max > max_levels - 1) {
+      bounds.y.max = max_levels - 1;
+    }
+
+    this.currentYear = this.returnYearNumber(
+      this.chartMiddle({
+        x: { min: bounds.x.min, max: bounds.x.max },
+        y: { min: bounds.y.min, max: bounds.y.max },
+      }),
+    );
+    return {
+      x: { min: bounds.x.min, max: bounds.x.max },
+      y: { min: bounds.y.min, max: bounds.y.max },
+    };
+  }
+
+  chartMiddle(bounds: {
+    x: { min: number; max: number };
+    y: { min: number; max: number };
+  }) {
+    return (bounds.x.max + bounds.x.min) / 2;
+  }
+
+  chartXRangeDiff(): number {
+    var bounds = this.chartBounds();
+    return Math.abs(bounds.x.max - bounds.x.min);
+  }
+
+  barWidthPercentage(values: { from: number; to: number }) {
+    var width = Math.abs(values.to - values.from);
+    return Math.round((width / this.chartXRangeDiff()) * 100);
+  }
+
+  returnYearNumber(value: number): number {
+    if (value > 0) return Math.round(value / this.yearLength);
+    if (value == 0) return 0;
+    return Math.round((value - year_value - 1) / year_value);
+  }
+
+  returnMonthIdx(value: number): number {
+    //var true_value = this.getTrueValue(value);
+    //var idx = Math.round(true_value / month_value) % month_value;
+    //return idx;
+
+    //gets to within 1 year, so max months.length - 1 loops
+    var target =
+      value -
+      Math.sign(value) * Math.ceil(value / this.yearLength) * this.yearLength;
+    target = this.getTrueValue(value) % this.yearLength;
+    var curr = 0;
+    var monthIdx = 0;
+    while (curr < target) {
+      if (curr + this.months[monthIdx].length > target) return monthIdx;
+      curr += this.months[monthIdx].length;
+      monthIdx = (monthIdx + 1) % this.months.length;
+    }
+    return monthIdx;
+  }
+
+  returnDayValue(value: number) {
+    var true_value = this.getTrueValue(value);
+    var idx = Math.round(true_value / day_value) % day_value;
+    return idx + 1;
+  }
+
+  returnMonthOfYear(value: number) {
+    var true_value = this.getTrueValue(value);
+    var idx = Math.round(true_value / month_value) % (year_value / month_value);
+    return idx + 1;
+  }
+
+  returnDayOfMonth(value: number) {
+    var true_value = this.getTrueValue(value);
+    var idx = Math.round(true_value / day_value) % month_value;
+    return idx + 1;
+  }
+
+  getDateNumberString(value: number) {
+    var signString = this.returnYearNumber(value) < 0 ? "-" : "";
+    return (
+      signString +
+      Math.abs(this.returnYearNumber(value)).toString().padStart(4, "0") +
+      "-" +
+      this.returnMonthOfYear(value).toString().padStart(2, "0") +
+      "-" +
+      this.returnDayOfMonth(value).toString().padStart(2, "0")
+    );
+  }
+
+  getTrueValue(value: number): number {
+    //if (value >= 0) return Math.round(value);
+    //return Math.abs(value - (this.yearLength - Math.abs(value) % this.yearLength));
+    //return Math.round(Math.ceil(Math.abs(value) / this.yearLength ) * this.yearLength - Math.abs(value) % this.yearLength);
+    return value < 0
+      ? Math.round(
+          Math.ceil(Math.abs(value) / this.yearLength) * this.yearLength -
+            Math.abs(value),
+        )
+      : Math.round(value);
+  }
+
+  isLargerThanX(value: number) {
+    if (value < this.chartXRangeDiff()) return true;
+    return false;
+  }
+
+  isStartOf(value: number, unit: string) {
+    var startOfValue;
+    if (unit == "year") startOfValue = year_value;
+    else if (unit == "month") startOfValue = month_value;
+    else if (unit == "week") startOfValue = week_value;
+    else startOfValue = 1;
+
+    var true_value = this.getTrueValue(value);
+    if (Math.round(true_value) === 0) return true;
+    return Math.round(true_value) % startOfValue === 0;
+  }
+
+  isLargerThanYear(chart: Chart) {
+    if (year_value < this.chartXRangeDiff()) return true;
+    return false;
+  }
+
+  returnYear(value: number) {
+    var signStr = value < 0 ? "-" : " ";
+    return (
+      signStr + String(Math.abs(this.returnYearNumber(value))).padStart(4, "0")
+    );
+  }
+
+  returnMonth(value: number) {
+    if (this.months == null) return "";
+    return this.months[this.returnMonthIdx(value)].name.substr(0, 3);
+    var true_value = this.getTrueValue(value);
+    var idx = Math.floor(true_value / month_value) % data.months.length;
+    return data.months[idx].substr(0, 3);
+  }
+
+  returnDay(value: number) {
+    var true_value = this.getTrueValue(value);
+    var idx = Math.floor(true_value / day_value) % data.weekdays.length;
+    return data.weekdays[idx];
+  }
+
+  returnDateTimeString(value: number) {
+    if (this.isLargerThanX(3 * year_value)) {
+      return this.returnYear(value);
+    }
+    if (this.isLargerThanX(year_value)) {
+      return this.returnYear(value) + ":" + this.returnMonth(value);
+    }
+    if (this.isLargerThanX(month_value)) {
+      return this.returnMonth(value) + "-" + this.returnDayOfMonth(value);
+    }
+    return (
+      this.returnMonth(value) +
+      "-" +
+      this.returnDayOfMonth(value) +
+      ":" +
+      this.returnDay(value)
+    );
+  }
+
+  getCurrentYearFormat() {
+    if (!this.isZoomedOrPanned()) return "".padStart(4, "0");
+    var range = this.chartXRangeDiff();
+    var signStr = String(this.currentYear < 0 ? String("-") : String(" "));
+    if (range < month_value)
+      return (
+        signStr +
+        String(Math.abs(this.currentYear)).padStart(4, "0") +
+        " " +
+        this.returnMonth(this.chartMiddle(this.chartBounds()))
+      );
+    return signStr + String(Math.abs(this.currentYear)).padStart(4, "0");
+  }
+
+  getValueFromLeftSide(value: number) {
+    var bounds = this.chartBounds();
+    return bounds.x.min + value;
+  }
+
+  scaleHieght: number;
+  scaleHeightBox: number;
+
+  updateScaleHeight() {
+    this.scaleHieght = 0.5 + (this.chartBounds().y.min ?? 0);
+  }
+
+  updateScaleHeightBox() {
+    this.scaleHeightBox = (this.chartBounds().y.max ?? 0) + 0.5;
+  }
+
+  getLine(increment: number, color: string, chart: chartTimeline) {
+    return {
+      xMin: function () {
+        return chart.getValueFromLeftSide(increment);
+      },
+      xMax: function () {
+        return chart.getValueFromLeftSide(increment);
+      },
+      yMin: function () {
+        chart.updateScaleHeight();
+        return chart.scaleHieght - 1;
+      },
+      yMax: function () {
+        return chart.scaleHieght;
+      },
+      borderColor: color,
+      borderWidth: 2,
+    };
+  }
+
+  getBox(center: number, width: number, color: string, chart: chartTimeline) {
+    chart.updateScaleHeightBox();
+    return {
+      type: "box",
+      xMin: function () {
+        return center - width / 2;
+      },
+      xMax: function () {
+        return center + width / 2;
+      },
+      yMin: function () {
+        return chart.scaleHeightBox - 1;
+      },
+      yMax: function () {
+        return chart.scaleHeightBox;
+      },
+      backgroundColor: color,
+      borderColor: color,
+      borderWidth: 2,
+    };
+  }
+
+  tickString: string;
+
+  getScale(location: number) {
+    var stepSize;
+
+    if (this.isLargerThanX(3 * year_value)) {
+      stepSize = year_value;
+      this.tickString = "year";
+    } else if (this.isLargerThanX(year_value)) {
+      stepSize = month_value;
+      this.tickString = "month";
+    } else if (this.isLargerThanX(month_value * 3)) {
+      stepSize = 2 * week_value;
+      this.tickString = "2week";
+    } else if (this.isLargerThanX(month_value)) {
+      stepSize = week_value;
+      this.tickString = "week";
+    } else {
+      stepSize = day_value;
+      this.tickString = "day";
+    }
+
+    var center =
+      this.chartMiddle(this.chartBounds()) +
+      this.chartXRangeDiff() / 6 +
+      stepSize * location;
+    if (center + stepSize > this.chartBounds().x.max) return;
+    return this.getBox(center, stepSize, "rgba(112, 112, 112, 0.5)", this);
+  }
+
+  lastClick: number;
+  myResetZoom() {
+    if (Date.now() - this.lastClick < 250) {
+      this.resetZoom();
+      this.update();
+    }
+    this.lastClick = Date.now();
+  }
 }
 
-import { Chart } from 'chart.js';
+var data: any = [];
 
-export class chartTimeline extends Chart{
-    plugin: ChartPlugin;
-    //settings: ExamplePluginSettings = Object.assign({}, DEFAULT_SETTINGS);
-    name: string = "Default Name";
-    id: string = "";
-    weekOverflow: boolean = false;
-
-    weekdays: weekType[] = [];
-    months: monthType[] = [];
-    seasons: seasonType[] = [];
-    moons: moonType[] = [];
-
-    yearLength: number = 0;
-
-    currentYear: number = 0;
-    ownPath: string = "";
-
-    
-
-    constructor(context, chartOptions, calendar, plugin, ownPath: string) {
-        super(context, chartOptions);
-
-        this.plugin = plugin;
-        this.name = calendar.name;
-        this.id = calendar.id;
-        this.weekOverflow = calendar.static.overflow;
-        this.ownPath = ownPath;
-
-        for(let day of calendar.static.weekdays){
-            this.weekdays.push(day);
-        }
-
-        for(let month of calendar.static.months){
-            this.yearLength += month.length;
-            this.months.push(month);
-        }
-
-        for (let season of calendar.seasonal.seasons){
-            this.seasons.push(season);
-        }
-
-        for (let moon of calendar.static.moons){
-            this.moons.push(moon);
-        }
-    }
-
-    chartBounds() : {x: {min: number, max: number}, y: {min: number, max: number}} | undefined{
-        var bounds = (this.isZoomedOrPanned() ? this.getZoomedScaleBounds() : this.getInitialScaleBounds());
-        if(bounds == null || bounds.x == null || bounds.y == null) return {x:{min: 0, max: 100}, y: {min: 0, max: 100}};
-
-        if(bounds.y.max > max_levels - 1) {bounds.y.max = max_levels - 1;}
-
-        this.currentYear = this.returnYearNumber(this.chartMiddle({x: {min: bounds.x.min, max: bounds.x.max}, y: {min: bounds.y.min, max: bounds.y.max}}));
-        return {x: {min: bounds.x.min, max: bounds.x.max}, y: {min: bounds.y.min, max: bounds.y.max}};
-    }
-
-    chartMiddle(bounds: {x: {min: number, max: number}, y: {min: number, max: number}}){
-        return (bounds.x.max + bounds.x.min)/2;
-    }
-
-    chartXRangeDiff(): number{
-        var bounds = this.chartBounds();
-        return Math.abs(bounds.x.max - bounds.x.min);
-    }
-
-    barWidthPercentage(values: {from: number, to: number}){
-        var width = Math.abs(values.to - values.from);
-        return Math.round((width / this.chartXRangeDiff()) * 100);
-    }
-
-    returnYearNumber(value: number): number{
-        if (value > 0) return Math.round(value / this.yearLength);
-        if (value == 0) return 0;
-        return Math.round((value - year_value - 1) / year_value);
-    }
-
-    returnMonthIdx(value:number) : number{
-        //var true_value = this.getTrueValue(value);
-        //var idx = Math.round(true_value / month_value) % month_value;
-        //return idx;
-
-        //gets to within 1 year, so max months.length - 1 loops
-        var target = value - Math.sign(value)*Math.ceil(value / this.yearLength) * this.yearLength;
-        target = this.getTrueValue(value) % this.yearLength;
-        var curr = 0
-        var monthIdx = 0;
-        while (curr < target){
-            if(curr + this.months[monthIdx].length > target) return monthIdx;
-            curr += this.months[monthIdx].length;
-            monthIdx = (monthIdx + 1) % this.months.length;
-        }
-        return monthIdx;
-    }
-
-    returnDayValue(value: number){
-        var true_value = this.getTrueValue(value);
-        var idx = Math.round(true_value / day_value) % day_value;
-        return idx + 1;
-    }
-
-    returnMonthOfYear(value: number){
-        var true_value = this.getTrueValue(value);
-        var idx = Math.round(true_value / month_value) % (year_value / month_value);
-        return idx + 1;
-    }
-
-    returnDayOfMonth(value: number){
-        var true_value = this.getTrueValue(value);
-        var idx = Math.round(true_value / day_value) % month_value;
-        return idx + 1;
-    }
-
-    getDateNumberString(value: number){
-        var signString = this.returnYearNumber(value) < 0 ? "-" : "";
-        return  signString + (Math.abs(this.returnYearNumber(value)).toString().padStart(4,'0')) + "-" + this.returnMonthOfYear(value).toString().padStart(2,'0') + "-" + this.returnDayOfMonth(value).toString().padStart(2,'0');
-    }
-
-    getTrueValue(value: number): number{
-        //if (value >= 0) return Math.round(value);
-        //return Math.abs(value - (this.yearLength - Math.abs(value) % this.yearLength));
-        //return Math.round(Math.ceil(Math.abs(value) / this.yearLength ) * this.yearLength - Math.abs(value) % this.yearLength);
-        return value < 0 ? Math.round(Math.ceil(Math.abs(value) / this.yearLength ) * this.yearLength - Math.abs(value)) : Math.round(value);
-    }
-
-    isLargerThanX(value: number){
-        if(value < this.chartXRangeDiff()) return true;
-        return false;
-    }
-
-    isStartOf(value: number, unit: string){
-        var startOfValue
-        if (unit == "year") startOfValue = year_value;
-        else if (unit == "month") startOfValue = month_value;
-        else if (unit == "week") startOfValue = week_value;
-        else startOfValue = 1;
-
-        var true_value = this.getTrueValue(value);
-        if (Math.round(true_value) === 0) return true;
-        return (Math.round(true_value) % startOfValue) === 0;
-    }
-
-    isLargerThanYear(chart: Chart){
-        if(year_value < this.chartXRangeDiff()) return true;
-        return false;
-    }
-
-    returnYear(value: number) {
-        var signStr = value < 0 ? "-" : " ";
-        return signStr + String(Math.abs(this.returnYearNumber(value))).padStart(4,'0');
-    }
-
-    returnMonth(value: number) {
-        if(this.months == null) return "";
-        return this.months[this.returnMonthIdx(value)].name.substr(0,3);
-        var true_value = this.getTrueValue(value);
-        var idx = Math.floor(true_value / month_value) % data.months.length;
-        return (data.months[idx]).substr(0,3);
-    }
-
-    returnDay(value: number) {
-        var true_value = this.getTrueValue(value);
-        var idx = Math.floor(true_value / day_value) % data.weekdays.length;
-        return data.weekdays[idx];
-    }
-
-    returnDateTimeString(value: number){
-        if (this.isLargerThanX(3 * year_value)){
-            return this.returnYear(value);
-        }
-        if(this.isLargerThanX(year_value)){
-            return this.returnYear(value) + ":" + this.returnMonth(value);
-        }
-        if(this.isLargerThanX(month_value)){
-            return this.returnMonth(value) + "-" + this.returnDayOfMonth(value);
-        }
-        return this.returnMonth(value) + "-" + this.returnDayOfMonth(value) + ":" + this.returnDay(value);
-    }
-
-    getCurrentYearFormat(){
-        if (!this.isZoomedOrPanned()) return "".padStart(4,'0');
-        var range = this.chartXRangeDiff();
-        var signStr = String(this.currentYear < 0 ? String("-") : String(" "));
-        if(range < month_value) return signStr + String(Math.abs(this.currentYear)).padStart(4,'0') + " " + this.returnMonth(this.chartMiddle(this.chartBounds()));
-        return  signStr + String(Math.abs(this.currentYear)).padStart(4,'0');
-    }
-
-
-    getValueFromLeftSide(value: number){
-        var bounds = this.chartBounds();
-        return bounds.x.min + value;
-    }
-
-    scaleHieght: number;
-    scaleHeightBox: number;
-
-    updateScaleHeight(){
-        this.scaleHieght = 0.5 + (this.chartBounds().y.min ?? 0);
-    }
-
-    updateScaleHeightBox(){
-        this.scaleHeightBox = (this.chartBounds().y.max ?? 0) + 0.5;
-    }
-
-    getLine(increment: number, color: string, chart: chartTimeline){
-        return {
-            xMin: function() {
-                return chart.getValueFromLeftSide(increment);
-            },
-            xMax: function() {
-                return chart.getValueFromLeftSide(increment);
-            },
-            yMin: function() {
-                chart.updateScaleHeight();
-                return chart.scaleHieght - 1;
-            },
-            yMax: function() {
-                return chart.scaleHieght;
-            },
-            borderColor: color,
-            borderWidth: 2,
-        };
-    }
-
-
-    getBox(center: number, width: number, color: string, chart: chartTimeline){
-        chart.updateScaleHeightBox();
-        return {
-            type: 'box',
-            xMin: function() {
-                return center - width/2;
-            },
-            xMax: function() {
-                return center + width/2;
-            },
-            yMin: function() {
-                return chart.scaleHeightBox - 1;
-            },
-            yMax: function() {
-                return chart.scaleHeightBox;
-            },
-            backgroundColor: color,
-            borderColor: color,
-            borderWidth: 2,
-        };
-    }
-
-    tickString: string;
-
-    getScale(location: number){
-        var stepSize;
-        
-        if(this.isLargerThanX(3 * year_value)){ stepSize = year_value; this.tickString = "year";}
-        else if(this.isLargerThanX(year_value)){ stepSize = month_value; this.tickString = "month";}
-        else if(this.isLargerThanX(month_value * 3)){ stepSize = 2 * week_value; this.tickString = "2week";}
-        else if(this.isLargerThanX(month_value)){ stepSize = week_value; this.tickString = "week";}
-        else{ stepSize = day_value; this.tickString = "day";}
-
-        var center = this.chartMiddle(this.chartBounds()) + this.chartXRangeDiff() / 6 + stepSize * location;
-        if(center + stepSize > this.chartBounds().x.max) return;
-        return this.getBox(center, stepSize, "rgba(112, 112, 112, 0.5)", this);
-    }
-
-    lastClick: number;
-    myResetZoom(){
-        if (Date.now() - this.lastClick < 250){
-            this.resetZoom();
-            this.update();
-        }
-        this.lastClick = Date.now();
-    }
-}
-
-
-
-
-
-var data:any = [];
-
-var year_value  = 336;
+var year_value = 336;
 var month_value = 28;
-var week_value  = 7;
-var day_value   = 1;
+var week_value = 7;
+var day_value = 1;
 var MIN_BAR_LENGTH = 1;
 
-function updateVars(ownPath: string){
-    var myMonths : string[] = [];
-    var tmpYearValue = 0;
-    var tmpMonthValue = 0;
-    for(let month of myData.calendars[0].static.months){
-        myMonths.push(month.name);
-        tmpYearValue += month.length;
-        tmpMonthValue = month.length;
-    }
+function updateVars(ownPath: string) {
+  var myMonths: string[] = [];
+  var tmpYearValue = 0;
+  var tmpMonthValue = 0;
+  for (let month of myData.calendars[0].static.months) {
+    myMonths.push(month.name);
+    tmpYearValue += month.length;
+    tmpMonthValue = month.length;
+  }
 
-    var myWeekdays : string[] = [];
-    for(let day of myData.calendars[0].static.weekdays){
-        myWeekdays.push(day.name);
-    }
+  var myWeekdays: string[] = [];
+  for (let day of myData.calendars[0].static.weekdays) {
+    myWeekdays.push(day.name);
+  }
 
-    data = {
-        weekdays: myWeekdays,
-        months: myMonths,
-        weeks_in_month: 4,
-    }
+  data = {
+    weekdays: myWeekdays,
+    months: myMonths,
+    weeks_in_month: 4,
+  };
 
-    year_value = tmpYearValue;
-    month_value = tmpMonthValue;
-    week_value = myData.calendars[0].static.weekdays.length;
-    day_value = 1;
+  year_value = tmpYearValue;
+  month_value = tmpMonthValue;
+  week_value = myData.calendars[0].static.weekdays.length;
+  day_value = 1;
 
-    if (dv.page(ownPath).MIN_BAR_LENGTH != null){
-        MIN_BAR_LENGTH = dv.page(ownPath).MIN_BAR_LENGTH;
-    }
+  if (dv.page(ownPath).MIN_BAR_LENGTH != null) {
+    MIN_BAR_LENGTH = dv.page(ownPath).MIN_BAR_LENGTH;
+  }
 
-    return;
+  return;
 }
-
 
 var current_year = 0;
 var max_levels = 1;
 
-
 //'rgba(255, 206, 86, 0.2)'
-const bar_colors = ['#e74645', '#fb7756', '#facd60', '#fdfa66', '#1ac0c6']
+const bar_colors = ["#e74645", "#fb7756", "#facd60", "#fdfa66", "#1ac0c6"];
 var bar_colors_index = 0;
 
-function getBarColor(){
-    return bar_colors[bar_colors_index++ % bar_colors.length];
+function getBarColor() {
+  return bar_colors[bar_colors_index++ % bar_colors.length];
 }
 
-function range_to_data_lvl(range:[number, number], level: number){
-    var myData = Array(level - 1).fill(null);
-    // for (let i = 0 ; i < (level - 1); i++) myData.push(null);
-    
-    var start: number = range[0];
-    var end: number = range[1];
-    
-    myData.push([start, end]);
-    return myData;
+function range_to_data_lvl(range: [number, number], level: number) {
+  var myData = Array(level - 1).fill(null);
+  // for (let i = 0 ; i < (level - 1); i++) myData.push(null);
+
+  var start: number = range[0];
+  var end: number = range[1];
+
+  myData.push([start, end]);
+  return myData;
 }
 
+function sortThisEvent(dataList, event, levelParam: number) {
+  var level = levelParam;
+  for (let e of dataList) {
+    if (e == event) continue;
+    if (e.level == level) {
+      var overlapping = e.start < event.end && event.start < e.end;
+      if (Math.abs(event.start) - Math.abs(event.end) == 0) {
+        // if event is 0 length, check for <= instead of <
+        overlapping = e.start <= event.end && event.start <= e.end;
+      }
 
+      if (chartSize != null && overlapping == false) {
+        var pixelPerValue = chartSize.widthpx / chartSize.widthValue;
+        var minOverlapValue = MIN_BAR_LENGTH / pixelPerValue;
 
-function sortThisEvent(dataList, event, levelParam: number){
-    var level = levelParam;
-    for(let e of dataList){
-        if (e == event) continue;
-        if(e.level == level) {
-            var overlapping = e.start < event.end && event.start < e.end;
-            if (Math.abs(event.start) - Math.abs(event.end) == 0){
-                // if event is 0 length, check for <= instead of <
-                overlapping = e.start <= event.end && event.start <= e.end;
-            }
+        var localStart1 = e.start;
+        var localEnd1 = e.end;
+        var localStart2 = event.start;
+        var localEnd2 = event.end;
 
-            if (chartSize != null && overlapping == false){
-                var pixelPerValue = chartSize.widthpx / chartSize.widthValue;
-                var minOverlapValue = MIN_BAR_LENGTH / pixelPerValue;
-
-                var localStart1 = e.start;
-                var localEnd1 = e.end;
-                var localStart2 = event.start;
-                var localEnd2 = event.end;
-
-                if (e.end - e.start < minOverlapValue){
-                    localStart1 = Math.sign(e.start) * Math.abs(e.start)         - minOverlapValue;
-                    localEnd1   = Math.sign(e.start) * Math.abs(e.start)         + minOverlapValue;
-                }
-
-                if (event.end - event.start < minOverlapValue){
-                    localStart2 = Math.sign(event.start) * Math.abs(event.start) - minOverlapValue;
-                    localEnd2   = Math.sign(event.start) * Math.abs(event.start) + minOverlapValue;
-                }
-                // localEnd2 = Math.max(localEnd2, event.end);
-                if (localStart1 < localEnd2 && localStart2 < localEnd1){
-                    overlapping = true;
-                }
-            }
-
-            if(e.level == level && (overlapping)){
-                return sortThisEvent(dataList, event, level + 1);
-            }
+        if (e.end - e.start < minOverlapValue) {
+          localStart1 =
+            Math.sign(e.start) * Math.abs(e.start) - minOverlapValue;
+          localEnd1 = Math.sign(e.start) * Math.abs(e.start) + minOverlapValue;
         }
+
+        if (event.end - event.start < minOverlapValue) {
+          localStart2 =
+            Math.sign(event.start) * Math.abs(event.start) - minOverlapValue;
+          localEnd2 =
+            Math.sign(event.start) * Math.abs(event.start) + minOverlapValue;
+        }
+        // localEnd2 = Math.max(localEnd2, event.end);
+        if (localStart1 < localEnd2 && localStart2 < localEnd1) {
+          overlapping = true;
+        }
+      }
+
+      if (e.level == level && overlapping) {
+        return sortThisEvent(dataList, event, level + 1);
+      }
     }
-    
-    if(level > max_levels) max_levels = level;
-    return level;
+  }
+
+  if (level > max_levels) max_levels = level;
+  return level;
 }
 
-function compareElements(a:{start: number, end: number}, b:{start: number, end: number}){
-    return (b.end - b.start) - (a.end - a.start);
+function compareElements(
+  a: { start: number; end: number },
+  b: { start: number; end: number },
+) {
+  return b.end - b.start - (a.end - a.start);
 }
 
-function sortEvents(datalist){
-    max_levels = 0;
-    var localDataList = datalist.sort(compareElements);
-    // for(let i = 0; i < localDataList.length; i++){localDataList[i].level = 0;}
-    for(let i = 0; i < localDataList.length; i++){
-        // if(localDataList[i].level > max_levels) max_levels = localDataList[i].level;
-        // if(localDataList[i].level < 0){
-        localDataList[i].level = sortThisEvent(localDataList, localDataList[i], 1);
-        // }
-        // localDataList[i].valid = true;
-    }
-    return localDataList;
+function sortEvents(datalist) {
+  max_levels = 0;
+  var localDataList = datalist.sort(compareElements);
+  // for(let i = 0; i < localDataList.length; i++){localDataList[i].level = 0;}
+  for (let i = 0; i < localDataList.length; i++) {
+    // if(localDataList[i].level > max_levels) max_levels = localDataList[i].level;
+    // if(localDataList[i].level < 0){
+    localDataList[i].level = sortThisEvent(localDataList, localDataList[i], 1);
+    // }
+    // localDataList[i].valid = true;
+  }
+  return localDataList;
 }
 
-var earliestEvent: number= null;
+var earliestEvent: number = null;
 var latestEvent: number = null;
 
-function getEvents(ownPath: string){
-    var dataList = [];
-    var Pages = dv.pages().where(t => t.timelines);
+function getEvents(ownPath: string) {
+  var dataList = [];
+  var Pages = dv.pages().where((t) => t.timelines);
 
-    var shownTimelines = dv.page(ownPath).timelines_rendered;
-    for (let page of Pages) {
-        if(shownTimelines != null){
-            if(page.timelines.some(value => shownTimelines.includes(value)) == false) continue;
-            if(page["fc-display-name"] == null) continue;
-            if(page["fc-date"] == null) continue;
-            if(page["fc-end"] == null) continue;
-        }
-        var dataObject = {
-        timeline: page.timelines,
-        eventName: page["fc-display-name"].toString(),
-        
-        start: tripletToValue(page["fc-date"]),
-        end: tripletToValue(page["fc-end"]),
-        trueStart: tripletToValue(page["fc-date"]), // also easier to have these numbers not shifted in an array
-        trueEnd: tripletToValue(page["fc-end"]), // since we artifically elongate too short ones, we need to remember what the true end is
-        
-        level: page.level == null ? -1 : page.level,
-        valid: page.level == null ? false : true,
-        }
-        
-        if (earliestEvent == null || dataObject.start < earliestEvent){earliestEvent = dataObject.start;}
-        if (latestEvent == null || dataObject.end > latestEvent){latestEvent = dataObject.end;}
-        dataList.push(dataObject);
+  var shownTimelines = dv.page(ownPath).timelines_rendered;
+  for (let page of Pages) {
+    if (shownTimelines != null) {
+      if (
+        page.timelines.some((value) => shownTimelines.includes(value)) == false
+      )
+        continue;
+      if (page["fc-display-name"] == null) continue;
+      if (page["fc-date"] == null) continue;
+      if (page["fc-end"] == null) continue;
     }
-    return dataList;
-    // return sortEvents(dataList);
-}
+    var dataObject = {
+      timeline: page.timelines,
+      eventName: page["fc-display-name"].toString(),
 
-function tripletToValue(string: string) : number {
-    var localString = string[0] == '-' ? string.substring(1) : string;
-    var yearSign = string[0] == '-' ? -1 : 1;
-    var splitString = String(localString).split('-');
-    // if 0 is put in as a day or month, it is treated as 1
-    return yearSign* Number(splitString[0]) * year_value + ((Math.max(Number(splitString[1]), 1)) - 1) * month_value + Math.max(Number(splitString[2]), 1) - 1;
-}
+      start: tripletToValue(page["fc-date"]),
+      end: tripletToValue(page["fc-end"]),
+      trueStart: tripletToValue(page["fc-date"]), // also easier to have these numbers not shifted in an array
+      trueEnd: tripletToValue(page["fc-end"]), // since we artifically elongate too short ones, we need to remember what the true end is
 
+      level: page.level == null ? -1 : page.level,
+      valid: page.level == null ? false : true,
+    };
 
-function eventsToData(list){			
-    var dataListObject = [];
-    list = sortEvents(list);
-    for(const event of list){
-        var dataObject = {
-            label: event.eventName,
-            data: range_to_data_lvl([event.start,event.end], event.level),
-            start: event.trueStart,
-            end: event.trueEnd,
-            level: event.level,
-            fill: false,
-            backgroundColor: getBarColor(),
-            datalabels: {
-                align: 'center',
-                anchor: 'center',
-            },
-            minBarLength: MIN_BAR_LENGTH,
-        };
-        dataListObject.push(dataObject);
+    if (earliestEvent == null || dataObject.start < earliestEvent) {
+      earliestEvent = dataObject.start;
     }
-    return dataListObject;
+    if (latestEvent == null || dataObject.end > latestEvent) {
+      latestEvent = dataObject.end;
+    }
+    dataList.push(dataObject);
+  }
+  return dataList;
+  // return sortEvents(dataList);
 }
 
+function tripletToValue(string: string): number {
+  var localString = string[0] == "-" ? string.substring(1) : string;
+  var yearSign = string[0] == "-" ? -1 : 1;
+  var splitString = String(localString).split("-");
+  // if 0 is put in as a day or month, it is treated as 1
+  return (
+    yearSign * Number(splitString[0]) * year_value +
+    (Math.max(Number(splitString[1]), 1) - 1) * month_value +
+    Math.max(Number(splitString[2]), 1) -
+    1
+  );
+}
+
+function eventsToData(list) {
+  var dataListObject = [];
+  list = sortEvents(list);
+  for (const event of list) {
+    var dataObject = {
+      label: event.eventName,
+      data: range_to_data_lvl([event.start, event.end], event.level),
+      start: event.trueStart,
+      end: event.trueEnd,
+      level: event.level,
+      fill: false,
+      backgroundColor: getBarColor(),
+      datalabels: {
+        align: "center",
+        anchor: "center",
+      },
+      minBarLength: MIN_BAR_LENGTH,
+    };
+    dataListObject.push(dataObject);
+  }
+  return dataListObject;
+}
 
 function hex2rgb(hex: string) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    
-    // return {r, g, b} 
-    return { r, g, b };
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+
+  // return {r, g, b}
+  return { r, g, b };
 }
 
 const LEVELS_STRING_ARRAY = [
-"Level: 1",
-"Level: 2",
-"Level: 3",
-"Level: 4",
-"Level: 5",
-"Level: 6",
-"Level: 7",
-"Level: 8",
-"Level: 9",
-"Level: 10",
-"Level: 11",
-"Level: 12",
-"Level: 13",
-"Level: 14",
-"Level: 15",
-"Level: 16",
-"Level: 17",
-"Level: 18",
-"Level: 19",
-"Level: 20",
-"Level: 21",
-"Level: 22",
-"Level: 23",
-"Level: 24",
-"Level: 25",
-"Level: 26",
-"Level: 27",
-"Level: 28",
-"Level: 29",
-"Level: 30",
-"Level: 31",
-"Level: 32",
-"Level: 33",
-"Level: 34",
-"Level: 35",
-"Level: 36",
-"Level: 37",
-"Level: 38",
-"Level: 39",
-"Level: 40",
-"Level: 41",
-"Level: 42",
-"Level: 43",
-"Level: 44",
-"Level: 45",
-"Level: 46",
-"Level: 47",
-"Level: 48",
-"Level: 49",
-"Level: 50",
-"Level: 51",
-"Level: 52",
-"Level: 53",
-"Level: 54",
-"Level: 55",
-"Level: 56",
-"Level: 57",
-"Level: 58",
-"Level: 59",
-"Level: 60",
-"Level: 61",
-"Level: 62",
-"Level: 63",
-"Level: 64",
-"Level: 65",
-"Level: 66",
-"Level: 67",
-"Level: 68",
-"Level: 69",
-"Level: 70",
-"Level: 71",
-"Level: 72",
-"Level: 73",
-"Level: 74",
-"Level: 75",
-"Level: 76",
-"Level: 77",
-"Level: 78",
-"Level: 79",
-"Level: 80",
-"Level: 81",
-"Level: 82",
-"Level: 83",
-"Level: 84",
-"Level: 85",
-"Level: 86",
-"Level: 87",
-"Level: 88",
-"Level: 89",
-"Level: 90",
-"Level: 91",
-"Level: 92",
-"Level: 93",
-"Level: 94",
-"Level: 95",
-"Level: 96",
-"Level: 97",
-"Level: 98",
-"Level: 99"
+  "Level: 1",
+  "Level: 2",
+  "Level: 3",
+  "Level: 4",
+  "Level: 5",
+  "Level: 6",
+  "Level: 7",
+  "Level: 8",
+  "Level: 9",
+  "Level: 10",
+  "Level: 11",
+  "Level: 12",
+  "Level: 13",
+  "Level: 14",
+  "Level: 15",
+  "Level: 16",
+  "Level: 17",
+  "Level: 18",
+  "Level: 19",
+  "Level: 20",
+  "Level: 21",
+  "Level: 22",
+  "Level: 23",
+  "Level: 24",
+  "Level: 25",
+  "Level: 26",
+  "Level: 27",
+  "Level: 28",
+  "Level: 29",
+  "Level: 30",
+  "Level: 31",
+  "Level: 32",
+  "Level: 33",
+  "Level: 34",
+  "Level: 35",
+  "Level: 36",
+  "Level: 37",
+  "Level: 38",
+  "Level: 39",
+  "Level: 40",
+  "Level: 41",
+  "Level: 42",
+  "Level: 43",
+  "Level: 44",
+  "Level: 45",
+  "Level: 46",
+  "Level: 47",
+  "Level: 48",
+  "Level: 49",
+  "Level: 50",
+  "Level: 51",
+  "Level: 52",
+  "Level: 53",
+  "Level: 54",
+  "Level: 55",
+  "Level: 56",
+  "Level: 57",
+  "Level: 58",
+  "Level: 59",
+  "Level: 60",
+  "Level: 61",
+  "Level: 62",
+  "Level: 63",
+  "Level: 64",
+  "Level: 65",
+  "Level: 66",
+  "Level: 67",
+  "Level: 68",
+  "Level: 69",
+  "Level: 70",
+  "Level: 71",
+  "Level: 72",
+  "Level: 73",
+  "Level: 74",
+  "Level: 75",
+  "Level: 76",
+  "Level: 77",
+  "Level: 78",
+  "Level: 79",
+  "Level: 80",
+  "Level: 81",
+  "Level: 82",
+  "Level: 83",
+  "Level: 84",
+  "Level: 85",
+  "Level: 86",
+  "Level: 87",
+  "Level: 88",
+  "Level: 89",
+  "Level: 90",
+  "Level: 91",
+  "Level: 92",
+  "Level: 93",
+  "Level: 94",
+  "Level: 95",
+  "Level: 96",
+  "Level: 97",
+  "Level: 98",
+  "Level: 99",
 ];
 
-function levels_var_to_array(){
-    return LEVELS_STRING_ARRAY.slice(0, max_levels);
+function levels_var_to_array() {
+  return LEVELS_STRING_ARRAY.slice(0, max_levels);
 }
 
 type ClickCallback = {
-    bounds: {top: number, bottom: number, left: number, right: number},
-    callback: (ctx, click) => void,
-}
+  bounds: { top: number; bottom: number; left: number; right: number };
+  callback: (ctx, click) => void;
+};
 
 var ZOOM_BUTTON_PLUS_IDX: number = null;
 var ZOOM_BUTTON_MINUS_IDX: number = null;
 let clickButtonCallbacks: ClickCallback[] = [];
 
-const zoomButton =  {
-    id: 'zoomButton',
-    beforeDraw(chart, args, options) {
-        const {ctx, chartArea: {top, right, bottom, left, width, height}} = chart;
-        ctx.save();
+const zoomButton = {
+  id: "zoomButton",
+  beforeDraw(chart, args, options) {
+    const {
+      ctx,
+      chartArea: { top, right, bottom, left, width, height },
+    } = chart;
+    ctx.save();
 
-        ctx.font = '16px Arial';
-        const plusText = '+';
-        const plusTextWidth = ctx.measureText(plusText).width;
-        const plusTextHeight = 16 / 2; //for 16px
-        const minusTextHeight = 16 / 4; //for 16px
-        const minusText = '-';
-        const minusTextWidth = ctx.measureText(minusText).width;
+    ctx.font = "16px Arial";
+    const plusText = "+";
+    const plusTextWidth = ctx.measureText(plusText).width;
+    const plusTextHeight = 16 / 2; //for 16px
+    const minusTextHeight = 16 / 4; //for 16px
+    const minusText = "-";
+    const minusTextWidth = ctx.measureText(minusText).width;
 
-        var buttonCoordinatesPlus = {
-            top: 10,
-            bottom: 30  ,
-            left: right - (plusTextWidth + 5),
-            right: right,
-        };
-        var buttonCoordinatesMinus = {
-            top: 10,
-            bottom: 30  ,
-            left: right - (plusTextWidth + 5) - (plusTextWidth + 5),
-            right: right - (plusTextWidth + 5),
-        };
+    var buttonCoordinatesPlus = {
+      top: 10,
+      bottom: 30,
+      left: right - (plusTextWidth + 5),
+      right: right,
+    };
+    var buttonCoordinatesMinus = {
+      top: 10,
+      bottom: 30,
+      left: right - (plusTextWidth + 5) - (plusTextWidth + 5),
+      right: right - (plusTextWidth + 5),
+    };
 
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
-        ctx.fillRect(buttonCoordinatesPlus.left, buttonCoordinatesPlus.top, buttonCoordinatesPlus.right - buttonCoordinatesPlus.left, buttonCoordinatesPlus.bottom - buttonCoordinatesPlus.top);
-        ctx.fillRect(buttonCoordinatesMinus.left, buttonCoordinatesMinus.top, buttonCoordinatesMinus.right - buttonCoordinatesMinus.left, buttonCoordinatesMinus.bottom - buttonCoordinatesMinus.top);
-        
-        ctx.strokeStyle = 'rgba(14, 113, 226, 0.2)';
-        ctx.strokeRect(buttonCoordinatesPlus.left, buttonCoordinatesPlus.top, buttonCoordinatesPlus.right - buttonCoordinatesPlus.left, buttonCoordinatesPlus.bottom - buttonCoordinatesPlus.top);
-        ctx.strokeRect(buttonCoordinatesMinus.left, buttonCoordinatesMinus.top, buttonCoordinatesMinus.right - buttonCoordinatesMinus.left, buttonCoordinatesMinus.bottom - buttonCoordinatesMinus.top);
+    ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
+    ctx.fillRect(
+      buttonCoordinatesPlus.left,
+      buttonCoordinatesPlus.top,
+      buttonCoordinatesPlus.right - buttonCoordinatesPlus.left,
+      buttonCoordinatesPlus.bottom - buttonCoordinatesPlus.top,
+    );
+    ctx.fillRect(
+      buttonCoordinatesMinus.left,
+      buttonCoordinatesMinus.top,
+      buttonCoordinatesMinus.right - buttonCoordinatesMinus.left,
+      buttonCoordinatesMinus.bottom - buttonCoordinatesMinus.top,
+    );
 
-        ctx.fillStyle = '#377fd1ff';
-        ctx.textAlign = 'center';
+    ctx.strokeStyle = "rgba(14, 113, 226, 0.2)";
+    ctx.strokeRect(
+      buttonCoordinatesPlus.left,
+      buttonCoordinatesPlus.top,
+      buttonCoordinatesPlus.right - buttonCoordinatesPlus.left,
+      buttonCoordinatesPlus.bottom - buttonCoordinatesPlus.top,
+    );
+    ctx.strokeRect(
+      buttonCoordinatesMinus.left,
+      buttonCoordinatesMinus.top,
+      buttonCoordinatesMinus.right - buttonCoordinatesMinus.left,
+      buttonCoordinatesMinus.bottom - buttonCoordinatesMinus.top,
+    );
 
-        var plusCenterX = buttonCoordinatesPlus.left + (buttonCoordinatesPlus.right - buttonCoordinatesPlus.left)/2;
-        var plusCenterY = buttonCoordinatesPlus.top + (buttonCoordinatesPlus.bottom - buttonCoordinatesPlus.top)/2 + plusTextHeight/2;
-        ctx.fillText(plusText, plusCenterX, plusCenterY);
+    ctx.fillStyle = "#377fd1ff";
+    ctx.textAlign = "center";
 
-        var minusCenterX = buttonCoordinatesMinus.left + (buttonCoordinatesMinus.right - buttonCoordinatesMinus.left)/2;
-        var minusCenterY = buttonCoordinatesMinus.top + (buttonCoordinatesMinus.bottom - buttonCoordinatesMinus.top)/2 + minusTextHeight/2;
-        ctx.fillText(minusText, minusCenterX, minusCenterY);
+    var plusCenterX =
+      buttonCoordinatesPlus.left +
+      (buttonCoordinatesPlus.right - buttonCoordinatesPlus.left) / 2;
+    var plusCenterY =
+      buttonCoordinatesPlus.top +
+      (buttonCoordinatesPlus.bottom - buttonCoordinatesPlus.top) / 2 +
+      plusTextHeight / 2;
+    ctx.fillText(plusText, plusCenterX, plusCenterY);
 
-        if (ZOOM_BUTTON_PLUS_IDX == null){
-            clickButtonCallbacks.push({bounds: buttonCoordinatesPlus, callback: zoomButtonPlusCallback});
-            ZOOM_BUTTON_PLUS_IDX = clickButtonCallbacks.length - 1;
-            console.log(clickButtonCallbacks);
-        } else {
-            clickButtonCallbacks[ZOOM_BUTTON_PLUS_IDX] = {bounds: buttonCoordinatesPlus, callback: zoomButtonPlusCallback};
-        }
+    var minusCenterX =
+      buttonCoordinatesMinus.left +
+      (buttonCoordinatesMinus.right - buttonCoordinatesMinus.left) / 2;
+    var minusCenterY =
+      buttonCoordinatesMinus.top +
+      (buttonCoordinatesMinus.bottom - buttonCoordinatesMinus.top) / 2 +
+      minusTextHeight / 2;
+    ctx.fillText(minusText, minusCenterX, minusCenterY);
 
-        if (ZOOM_BUTTON_MINUS_IDX == null){
-            clickButtonCallbacks.push({bounds: buttonCoordinatesMinus, callback: zoomButtonMinusCallback});
-            ZOOM_BUTTON_MINUS_IDX = clickButtonCallbacks.length - 1;
-            console.log(clickButtonCallbacks);
-        } else {
-            clickButtonCallbacks[ZOOM_BUTTON_MINUS_IDX] = {bounds: buttonCoordinatesMinus, callback: zoomButtonMinusCallback};
-        }
-
-        ctx.restore();
+    if (ZOOM_BUTTON_PLUS_IDX == null) {
+      clickButtonCallbacks.push({
+        bounds: buttonCoordinatesPlus,
+        callback: zoomButtonPlusCallback,
+      });
+      ZOOM_BUTTON_PLUS_IDX = clickButtonCallbacks.length - 1;
+      console.log(clickButtonCallbacks);
+    } else {
+      clickButtonCallbacks[ZOOM_BUTTON_PLUS_IDX] = {
+        bounds: buttonCoordinatesPlus,
+        callback: zoomButtonPlusCallback,
+      };
     }
+
+    if (ZOOM_BUTTON_MINUS_IDX == null) {
+      clickButtonCallbacks.push({
+        bounds: buttonCoordinatesMinus,
+        callback: zoomButtonMinusCallback,
+      });
+      ZOOM_BUTTON_MINUS_IDX = clickButtonCallbacks.length - 1;
+      console.log(clickButtonCallbacks);
+    } else {
+      clickButtonCallbacks[ZOOM_BUTTON_MINUS_IDX] = {
+        bounds: buttonCoordinatesMinus,
+        callback: zoomButtonMinusCallback,
+      };
+    }
+
+    ctx.restore();
+  },
 };
 
 const ZOOM_INCREMENT_SMALL = 1.5;
 const ZOOM_INCREMENT_LARGE = 2;
 
-function zoomButtonPlusCallback(ctx, click){
-    let zoomAmount: number = ZOOM_INCREMENT_SMALL;
-    if(click.altKey) zoomAmount = ZOOM_INCREMENT_LARGE;
-    ctx.zoom({x: zoomAmount, y: 0});
+function zoomButtonPlusCallback(ctx, click) {
+  let zoomAmount: number = ZOOM_INCREMENT_SMALL;
+  if (click.altKey) zoomAmount = ZOOM_INCREMENT_LARGE;
+  ctx.zoom({ x: zoomAmount, y: 0 });
 }
 
-function zoomButtonMinusCallback(ctx, click){    
-    let zoomAmount: number = 1/(ZOOM_INCREMENT_SMALL * 2);
-    if(click.altKey) zoomAmount = 1/(ZOOM_INCREMENT_LARGE * 2);
-    ctx.zoom({x: zoomAmount, y: 0});
+function zoomButtonMinusCallback(ctx, click) {
+  let zoomAmount: number = 1 / (ZOOM_INCREMENT_SMALL * 2);
+  if (click.altKey) zoomAmount = 1 / (ZOOM_INCREMENT_LARGE * 2);
+  ctx.zoom({ x: zoomAmount, y: 0 });
 }
 
+export function clickButtonHandler(ctx, click, chart) {
+  // console.log(click.offsetX, click.offsetY);
 
-
-export function clickButtonHandler(ctx, click, chart){
-    // console.log(click.offsetX, click.offsetY);
-
-    for (let i = 0; i < clickButtonCallbacks.length; i++){
-        if(click.offsetX >= clickButtonCallbacks[i].bounds.left &&
-            click.offsetX <= clickButtonCallbacks[i].bounds.right &&
-            click.offsetY >= clickButtonCallbacks[i].bounds.top &&
-            click.offsetY <= clickButtonCallbacks[i].bounds.bottom
-        ){
-            clickButtonCallbacks[i].callback(chart, click);
-            // return;
-        }
+  for (let i = 0; i < clickButtonCallbacks.length; i++) {
+    if (
+      click.offsetX >= clickButtonCallbacks[i].bounds.left &&
+      click.offsetX <= clickButtonCallbacks[i].bounds.right &&
+      click.offsetY >= clickButtonCallbacks[i].bounds.top &&
+      click.offsetY <= clickButtonCallbacks[i].bounds.bottom
+    ) {
+      clickButtonCallbacks[i].callback(chart, click);
+      // return;
     }
+  }
 
-    // clickButtonCallbacks.ZOOM_BUTTON.callback(ctx, click);
-};
+  // clickButtonCallbacks.ZOOM_BUTTON.callback(ctx, click);
+}
 
-function delayedZoomFunction(context){
-    chartSize = {widthpx: context.chart.width, heightpx: context.chart.height, widthValue: context.chart.chartXRangeDiff()};
-    var tmpDataSet = sortEvents(context.chart.data.datasets); //only updated level numbers, still need to remake data
-    for(let i = 0; i < tmpDataSet.length; i++){
-        tmpDataSet[i].data = range_to_data_lvl([tmpDataSet[i].start,tmpDataSet[i].end], tmpDataSet[i].level);
-    }
+function delayedZoomFunction(context) {
+  chartSize = {
+    widthpx: context.chart.width,
+    heightpx: context.chart.height,
+    widthValue: context.chart.chartXRangeDiff(),
+  };
+  var tmpDataSet = sortEvents(context.chart.data.datasets); //only updated level numbers, still need to remake data
+  for (let i = 0; i < tmpDataSet.length; i++) {
+    tmpDataSet[i].data = range_to_data_lvl(
+      [tmpDataSet[i].start, tmpDataSet[i].end],
+      tmpDataSet[i].level,
+    );
+  }
 
-    context.chart.data.datasets = tmpDataSet;   
-    context.chart.data.labels = levels_var_to_array();
-    context.chart.update();
+  context.chart.data.datasets = tmpDataSet;
+  context.chart.data.labels = levels_var_to_array();
+  context.chart.update();
 }
 
 var lastZoomUpdate: number = 0;
 
-export function getTimeline(ownPath: string, initialChartSizepx: {widthpx: number, heightpx: number}) {
-    updateVars(ownPath);
-    var Events = getEvents(ownPath);
-    if (chartSize == null){
-        chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  CHART_SCALE_MAX - CHART_SCALE_MIN};
-    } else {
-        chartSize.widthValue = CHART_SCALE_MAX - CHART_SCALE_MIN;
-    }
-    
-    // chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  latestEvent - earliestEvent};
-    var EventsData = eventsToData(Events);
-    var levels = levels_var_to_array();
+export function getTimeline(
+  ownPath: string,
+  initialChartSizepx: { widthpx: number; heightpx: number },
+) {
+  updateVars(ownPath);
+  var Events = getEvents(ownPath);
+  if (chartSize == null) {
+    chartSize = {
+      widthpx: initialChartSizepx.widthpx,
+      heightpx: initialChartSizepx.heightpx,
+      widthValue: CHART_SCALE_MAX - CHART_SCALE_MIN,
+    };
+  } else {
+    chartSize.widthValue = CHART_SCALE_MAX - CHART_SCALE_MIN;
+  }
 
-    const chartData = {
-        type: 'bar',
-        data: {
-            labels: levels,
-            datasets: EventsData,
+  // chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  latestEvent - earliestEvent};
+  var EventsData = eventsToData(Events);
+  var levels = levels_var_to_array();
+
+  const chartData = {
+    type: "bar",
+    data: {
+      labels: levels,
+      datasets: EventsData,
+    },
+    plugins: [zoomButton],
+    options: {
+      responsive: true,
+      indexAxis: "y",
+      scales: {
+        y: {
+          stacked: true,
         },
-        plugins: [zoomButton],
-        options: {
-            responsive: true,
-            indexAxis: 'y',
-            scales: {
-                y: {
-                    stacked: true,
-                },
-                x: {
-                    min: CHART_SCALE_MIN,
-                    max: CHART_SCALE_MAX,
-                    ticks: {
-                        autoSkip: true,
-                        autoSkipPadding: 5,
-                        color: function(context) {
-                            if(context.chart.isLargerThanX(3 * year_value)){
-                                return 'gray';
-                            } else if(context.chart.isLargerThanX(year_value)){
-                                if (context.chart.isStartOf(context.tick.value, "year")) return 'white';
-                            } else if(context.chart.isLargerThanX(month_value)){
-                                if (context.chart.isStartOf(context.tick.value, "month")) return 'white';
-                            } else if(context.chart.isLargerThanX(week_value)){
-                                if (context.chart.isStartOf(context.tick.value, "week")) return 'white';
-                            }
-                            return 'gray';
-                        },
-                        callback: function(value: number, index: number, ticks) {
-                            if(index === 0 || index === ticks.length - 1) return null;
-                            return this.chart.returnDateTimeString(value, ticks);                            
-                        },
-                    },
-                    afterBuildTicks: function(context) {
-                        var bounds = context.chart.chartBounds();
-                        var stepSize = month_value;
-                        if(context.chart.isLargerThanX(3 * year_value)) stepSize = year_value;
-                        else if(context.chart.isLargerThanX(year_value)) stepSize = month_value;
-                        else if(context.chart.isLargerThanX(month_value * 3)) stepSize = 2 * week_value;
-                        else if(context.chart.isLargerThanX(month_value)) stepSize = week_value;
-                        else stepSize = day_value;
-
-                        var firstTick = Math.ceil(bounds.x.min / stepSize) * stepSize;
-
-                        var newTicks = [];
-                        while(firstTick < bounds.x.max){
-                            newTicks.push({value: firstTick});
-                            firstTick += stepSize;
-                        }
-
-                        context.ticks = newTicks;                    
-                    },
-                    afterFit: (scale, context) => {
-                        //scale.height = 60;
-                    }
-                },
+        x: {
+          min: CHART_SCALE_MIN,
+          max: CHART_SCALE_MAX,
+          ticks: {
+            autoSkip: true,
+            autoSkipPadding: 5,
+            color: function (context) {
+              if (context.chart.isLargerThanX(3 * year_value)) {
+                return "gray";
+              } else if (context.chart.isLargerThanX(year_value)) {
+                if (context.chart.isStartOf(context.tick.value, "year"))
+                  return "white";
+              } else if (context.chart.isLargerThanX(month_value)) {
+                if (context.chart.isStartOf(context.tick.value, "month"))
+                  return "white";
+              } else if (context.chart.isLargerThanX(week_value)) {
+                if (context.chart.isStartOf(context.tick.value, "week"))
+                  return "white";
+              }
+              return "gray";
             },
-            plugins: {
-                zoom: {
-                    pan: {
-                        threshold: 10,
-                        enabled: true,
-                        mode: 'xy',
-                        onPan: function (context){
-                            context.chart.updateScaleHeight();
-                            context.chart.updateScaleHeightBox();
-                            context.chart.update();
-                        },
-                    },
-                    limits: {
-                        x: {
-                            minRange: week_value,
-                            min: -year_value * 9999,
-                            max: year_value * 9999,
-                        },
-                        y: {
-                            minRange: 2,
-                        }
-                    },
-                    zoom: {
-                        wheel: {
-                            enabled: true,
-                            modifierKey: 'ctrl',
-                        },
-                        scaleMode: 'xy',
-                        onZoomComplete: function (context){
-                            if (Date.now() >= lastZoomUpdate + 500 || lastZoomUpdate == 0){
-                                setTimeout(delayedZoomFunction(context), 500);
-                                lastZoomUpdate = Date.now();
-                            }
-                        },
-                    },
-                },
-                datalabels: {
-                    color: function(context){
-                        var color = context.dataset.backgroundColor;
-                        var monochrome = 0.299 * hex2rgb(color).r + 0.587 * hex2rgb(color).g + 0.114 * hex2rgb(color).b;
-                        var monochromeInv = 256 - monochrome;
-                        //return "rgb(" + (256 - hex2rgb(color).r) + ", " + (256 - hex2rgb(color).g) + ", " + (256 - hex2rgb(color).b )+ ")";
-                        //return "rgb("+monochromeInv+","+monochromeInv+","+monochromeInv+")";
-                        if (monochrome > 128) return 'black';
-                        return 'white';
-                    },
-                    display: 'auto',
-                    clip: 'true',
-                    formatter: function(value: number, context) {
-                        var range = {from: 0, to: 1000};
-                        for(let thisData of context.dataset.data){
-                            if (thisData != null){
-                                range = {from: thisData[0], to: thisData[1]};
-                            }
-                        }
-                        var widthPercentage = context.chart.barWidthPercentage(range);
-                        return (value != null && widthPercentage > 10) ? context.dataset.label : "";
-                    },
-                    font: {
-                        weight: 'bold'
-                    },
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            var start = context.dataset.start;
-                            var end = context.dataset.end;
-                            return context.chart.getDateNumberString(start) + " - " + context.chart.getDateNumberString(end);
-                            var range = [0,1000];
-                            for(let thisData of context.dataset.data) if (thisData != null) range = thisData;
-                            return context.chart.getDateNumberString(range[0]) + " - " + context.chart.getDateNumberString(range[1]);
-                        },
-                        title: function (tooltipItems) { //https://stackoverflow.com/questions/38819171/chart-js-2-0-how-to-change-title-of-tooltip
-                            if(tooltipItems.length > 0) {
-                                return tooltipItems[0].dataset.label || '';
-                            }
-                            return '';
-                        },
-                    }
-                },
-                title: {
-                    display: true,
-                    text: function(context){return 'Year:' + context.chart.getCurrentYearFormat();},
-                },
-                legend: {
-                    display: false,
-                },
-                annotation: {
-                    annotations: {
-                        // uncomment to enable scale boxes
-                        // bar_major: function(context){
-                        //     return context.chart.getScale(0);
-                        // },
-                        // bar_minor_left: function(context){
-                        //     return context.chart.getScale(-1);
-                        // },
-                        // bar_minor_right: function(context){
-                        //     return context.chart.getScale(1);
-                        // },
-                        // label1: function(context){
-                        //     var center = context.chart.chartMiddle(context.chart.chartBounds()) + context.chart.chartXRangeDiff() / 6;
-                        //     return {
-                        //         type: 'label',
-                        //         color: "rgba(255, 255, 255, 0.5)",
-                        //         xValue: center,
-                        //         yValue: context.chart.scaleHeightBox - 0.5,
-                        //         content: [context.chart.tickString],
-                        //         font: {
-                        //             size: 12,
-                        //         }
-                        //     }
-                        // }
-                        /*line_base: function(context){return context.chart.getLine(0, "rgba(112, 112, 112, 1)", context.chart);},
+            callback: function (value: number, index: number, ticks) {
+              if (index === 0 || index === ticks.length - 1) return null;
+              return this.chart.returnDateTimeString(value, ticks);
+            },
+          },
+          afterBuildTicks: function (context) {
+            var bounds = context.chart.chartBounds();
+            var stepSize = month_value;
+            if (context.chart.isLargerThanX(3 * year_value))
+              stepSize = year_value;
+            else if (context.chart.isLargerThanX(year_value))
+              stepSize = month_value;
+            else if (context.chart.isLargerThanX(month_value * 3))
+              stepSize = 2 * week_value;
+            else if (context.chart.isLargerThanX(month_value))
+              stepSize = week_value;
+            else stepSize = day_value;
+
+            var firstTick = Math.ceil(bounds.x.min / stepSize) * stepSize;
+
+            var newTicks = [];
+            while (firstTick < bounds.x.max) {
+              newTicks.push({ value: firstTick });
+              firstTick += stepSize;
+            }
+
+            context.ticks = newTicks;
+          },
+          afterFit: (scale, context) => {
+            //scale.height = 60;
+          },
+        },
+      },
+      plugins: {
+        zoom: {
+          pan: {
+            threshold: 10,
+            enabled: true,
+            mode: "xy",
+            onPan: function (context) {
+              context.chart.updateScaleHeight();
+              context.chart.updateScaleHeightBox();
+              context.chart.update();
+            },
+          },
+          limits: {
+            x: {
+              minRange: week_value,
+              min: -year_value * 9999,
+              max: year_value * 9999,
+            },
+            y: {
+              minRange: 2,
+            },
+          },
+          zoom: {
+            wheel: {
+              enabled: true,
+              modifierKey: "ctrl",
+            },
+            scaleMode: "xy",
+            onZoomComplete: function (context) {
+              if (Date.now() >= lastZoomUpdate + 500 || lastZoomUpdate == 0) {
+                setTimeout(delayedZoomFunction(context), 500);
+                lastZoomUpdate = Date.now();
+              }
+            },
+          },
+        },
+        datalabels: {
+          color: function (context) {
+            var color = context.dataset.backgroundColor;
+            var monochrome =
+              0.299 * hex2rgb(color).r +
+              0.587 * hex2rgb(color).g +
+              0.114 * hex2rgb(color).b;
+            var monochromeInv = 256 - monochrome;
+            //return "rgb(" + (256 - hex2rgb(color).r) + ", " + (256 - hex2rgb(color).g) + ", " + (256 - hex2rgb(color).b )+ ")";
+            //return "rgb("+monochromeInv+","+monochromeInv+","+monochromeInv+")";
+            if (monochrome > 128) return "black";
+            return "white";
+          },
+          display: "auto",
+          clip: "true",
+          formatter: function (value: number, context) {
+            var range = { from: 0, to: 1000 };
+            for (let thisData of context.dataset.data) {
+              if (thisData != null) {
+                range = { from: thisData[0], to: thisData[1] };
+              }
+            }
+            var widthPercentage = context.chart.barWidthPercentage(range);
+            return value != null && widthPercentage > 10
+              ? context.dataset.label
+              : "";
+          },
+          font: {
+            weight: "bold",
+          },
+        },
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              var start = context.dataset.start;
+              var end = context.dataset.end;
+              return (
+                context.chart.getDateNumberString(start) +
+                " - " +
+                context.chart.getDateNumberString(end)
+              );
+              var range = [0, 1000];
+              for (let thisData of context.dataset.data)
+                if (thisData != null) range = thisData;
+              return (
+                context.chart.getDateNumberString(range[0]) +
+                " - " +
+                context.chart.getDateNumberString(range[1])
+              );
+            },
+            title: function (tooltipItems) {
+              //https://stackoverflow.com/questions/38819171/chart-js-2-0-how-to-change-title-of-tooltip
+              if (tooltipItems.length > 0) {
+                return tooltipItems[0].dataset.label || "";
+              }
+              return "";
+            },
+          },
+        },
+        title: {
+          display: true,
+          text: function (context) {
+            return "Year:" + context.chart.getCurrentYearFormat();
+          },
+        },
+        legend: {
+          display: false,
+        },
+        annotation: {
+          annotations: {
+            // uncomment to enable scale boxes
+            // bar_major: function(context){
+            //     return context.chart.getScale(0);
+            // },
+            // bar_minor_left: function(context){
+            //     return context.chart.getScale(-1);
+            // },
+            // bar_minor_right: function(context){
+            //     return context.chart.getScale(1);
+            // },
+            // label1: function(context){
+            //     var center = context.chart.chartMiddle(context.chart.chartBounds()) + context.chart.chartXRangeDiff() / 6;
+            //     return {
+            //         type: 'label',
+            //         color: "rgba(255, 255, 255, 0.5)",
+            //         xValue: center,
+            //         yValue: context.chart.scaleHeightBox - 0.5,
+            //         content: [context.chart.tickString],
+            //         font: {
+            //             size: 12,
+            //         }
+            //     }
+            // }
+            /*line_base: function(context){return context.chart.getLine(0, "rgba(112, 112, 112, 1)", context.chart);},
                         line_day: function(context){return context.chart.getLine(day_value, "rgba(231, 228, 29, 1)", context.chart);},
                         line_year: function(context){return context.chart.getLine(year_value, "rgba(107, 39, 196, 1)", context.chart);},
                         line_month: function(context){return context.chart.getLine(month_value, "rgba(79, 207, 216, 1)", context.chart);},*/
-                    }
-                },
-            },
-            events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
-            onClick: function(e, context, chart) {
-                // chart.myResetZoom();
-                // clickButtonHandler(context, e);
-                return;
-                testStringVar = "Clicked!";
-                //context.chart.resetZoom('active');
-                context.chart.update();
-                return;
-                const canvasPosition = this.Chart.helpers.getRelativePosition(e, this.chart);
+          },
+        },
+      },
+      events: ["mousemove", "mouseout", "click", "touchstart", "touchmove"],
+      onClick: function (e, context, chart) {
+        // chart.myResetZoom();
+        // clickButtonHandler(context, e);
+        return;
+        testStringVar = "Clicked!";
+        //context.chart.resetZoom('active');
+        context.chart.update();
+        return;
+        const canvasPosition = this.Chart.helpers.getRelativePosition(
+          e,
+          this.chart,
+        );
 
-                // Substitute the appropriate scale IDs
-                const dataX = this.chart.scales.x.getValueForPixel(canvasPosition.x);
-                const dataY = this.chart.scales.y.getValueForPixel(canvasPosition.y);
-            },
-        }
-    };
+        // Substitute the appropriate scale IDs
+        const dataX = this.chart.scales.x.getValueForPixel(canvasPosition.x);
+        const dataY = this.chart.scales.y.getValueForPixel(canvasPosition.y);
+      },
+    },
+  };
 
-    return chartData;
+  return chartData;
 }
