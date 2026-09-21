@@ -1,19 +1,6 @@
-import {
-  MarkdownView,
-  Plugin,
-  parseYaml,
-  Menu,
-  Editor,
-  View,
-  Notice,
-  MarkdownPostProcessorContext,
-} from "obsidian";
+import { Plugin, MarkdownPostProcessorContext } from "obsidian";
 
 import Renderer from "./chartRenderer";
-// import {
-//   ChartPluginSettings,
-// } from './constants/settingsConstants';
-import { renderError } from "src/util";
 
 import { Chart } from "chart.js";
 import zoomPlugin from "chartjs-plugin-zoom";
@@ -75,66 +62,3 @@ export default class ChartPlugin extends Plugin {
     console.log("unloading plugin: Charts");
   }
 }
-
-/*
-import { Plugin, WorkspaceLeaf } from 'obsidian';
-import { ExampleView, VIEW_TYPE_EXAMPLE } from './view';
-
-export default class ExamplePlugin extends Plugin {
-    renderer: Renderer;
-
-    postprocessor = async (
-    content: string,
-    el: HTMLElement,
-    ctx: MarkdownPostProcessorContext
-  ) => {
-      await this.renderer.renderFromYaml({}, el, ctx)
-  }
-
-  async onload() {
-    this.renderer = new Renderer(this);
-
-    //@ts-ignore
-    window.renderChart = this.renderer.renderTimeline;
-
-    this.registerView(
-      VIEW_TYPE_EXAMPLE,
-      (leaf) => new ExampleView(leaf, this)
-    );
-
-    this.addRibbonIcon('dice', 'Activate view', () => {
-      this.activateView();
-    });
-  }
-
-  async onunload() {
-  }
-
-  async activateView() {
-		const leaf = this.app.workspace.getLeaf('tab');
-
-		leaf.setViewState({
-			type: VIEW_TYPE_EXAMPLE,
-			active: true,
-		});
-
-		this.app.workspace.revealLeaf(leaf);
-    const { workspace } = this.app;
-
-    let leaf: WorkspaceLeaf | null = null;
-    const leaves = workspace.getLeavesOfType(VIEW_TYPE_EXAMPLE);
-
-    if (leaves.length > 0) {
-      // A leaf with our view already exists, use that
-      leaf = leaves[0];
-    } else {
-      // Our view could not be found in the workspace, create a new leaf
-      // in the right sidebar for it
-      leaf = workspace.getRightLeaf(false);
-      await leaf.setViewState({ type: VIEW_TYPE_EXAMPLE, active: true });
-    }
-
-    // "Reveal" the leaf in case it is in a collapsed sidebar
-    workspace.revealLeaf(leaf);
-  }
-}*/

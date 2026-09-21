@@ -1,16 +1,18 @@
-import type { App, Editor, TFile } from "obsidian";
-import type { ChartPluginSettings } from "src/constants/settingsConstants";
-import type Renderer from "src/chartRenderer";
 import type ChartPlugin from "src/main";
 import { DEFAULT_SETTINGS, ExamplePluginSettings } from "src/main";
 
-import { getAPI } from "obsidian-dataview";
+import { getAPI as dataviewGetAPI } from "obsidian-dataview";
 
-const dv = getAPI();
+const dv = dataviewGetAPI();
 
 import myData from "../../calendarium/data.json";
 
-//import { palettes, scales } from '@makio135/give-me-colors'
+import type {
+  CalendarAPI,
+  Calendar,
+  CalDate,
+  CalEvent,
+} from "../../calendarium/main";
 
 export function renderError(error: any, el: HTMLElement) {
   const errorEl = el.createDiv({ cls: "chart-error" });
@@ -32,17 +34,6 @@ type ChartSize = {
   widthpx: number;
   heightpx: number;
   widthValue: number;
-};
-
-type EventType = {
-  timeline: string[];
-  eventName: string;
-  start: number;
-  end: number;
-  trueStart: number;
-  trueEnd: number;
-  level: number;
-  valid: boolean;
 };
 
 type weekType = {
@@ -76,6 +67,21 @@ type moonType = {
   id: string;
 };
 
+type ChartBounds = {
+  x: { min: number; max: number };
+  y: { min: number; max: number };
+};
+
+type EventsType = CalEvent & {
+  timeline: string;
+  eventName: string;
+
+  start: number;
+  end: number;
+
+  level: number;
+};
+
 import { Chart } from "chart.js";
 
 export class chartTimeline extends Chart {
@@ -94,6 +100,13 @@ export class chartTimeline extends Chart {
 
   currentYear: number = 0;
   ownPath: string = "";
+
+  mChartBounds: ChartBounds = {
+    x: { min: 0, max: 100 },
+    y: { min: 0, max: 100 },
+  };
+
+  mCalendarAPI: CalendarAPI;
 
   constructor(context, chartOptions, calendar, plugin, ownPath: string) {
     super(context, chartOptions);
@@ -120,6 +133,41 @@ export class chartTimeline extends Chart {
     for (let moon of calendar.static.moons) {
       this.moons.push(moon);
     }
+
+    var calendarAPI = window.Calendarium.getAPI("test_calendar");
+    var store = calendarAPI.getStore();
+    var monthStore = store.getMonthStoreForDate({ year: 1, month: 1, day: 1 });
+    var yearStore = store.getYearStoreForDate({ year: 1, month: 1, day: 1 });
+    console.log("Calendarapi");
+    console.log(calendarAPI);
+    console.log("store");
+    console.log(store);
+    console.log("month store");
+    console.log(monthStore);
+    console.log("year store");
+    console.log(yearStore);
+
+    this.mCalendarAPI = window.Calendarium.getAPI("test_calendar");
+  }
+
+  onPan() {
+    this.updateCurrentYear();
+    this.chartBounds();
+  }
+
+  onZoom() {
+    this.updateCurrentYear();
+    this.chartBounds();
+  }
+
+  updateCurrentYear() {
+    this.currentYear = this.returnYearNumber(
+      this.chartMiddle({
+        x: { min: this.mChartBounds.x.min, max: this.mChartBounds.x.max },
+        y: { min: this.mChartBounds.y.min, max: this.mChartBounds.y.max },
+      }),
+    );
+    return;
   }
 
   chartBounds():
@@ -135,16 +183,12 @@ export class chartTimeline extends Chart {
       bounds.y.max = max_levels - 1;
     }
 
-    this.currentYear = this.returnYearNumber(
-      this.chartMiddle({
-        x: { min: bounds.x.min, max: bounds.x.max },
-        y: { min: bounds.y.min, max: bounds.y.max },
-      }),
-    );
-    return {
+    this.mChartBounds = {
       x: { min: bounds.x.min, max: bounds.x.max },
       y: { min: bounds.y.min, max: bounds.y.max },
     };
+
+    return this.mChartBounds;
   }
 
   chartMiddle(bounds: {
@@ -208,18 +252,6 @@ export class chartTimeline extends Chart {
     return idx + 1;
   }
 
-  getDateNumberString(value: number) {
-    var signString = this.returnYearNumber(value) < 0 ? "-" : "";
-    return (
-      signString +
-      Math.abs(this.returnYearNumber(value)).toString().padStart(4, "0") +
-      "-" +
-      this.returnMonthOfYear(value).toString().padStart(2, "0") +
-      "-" +
-      this.returnDayOfMonth(value).toString().padStart(2, "0")
-    );
-  }
-
   getTrueValue(value: number): number {
     //if (value >= 0) return Math.round(value);
     //return Math.abs(value - (this.yearLength - Math.abs(value) % this.yearLength));
@@ -232,9 +264,10 @@ export class chartTimeline extends Chart {
       : Math.round(value);
   }
 
-  isLargerThanX(value: number) {
-    if (value < this.chartXRangeDiff()) return true;
-    return false;
+  isLargerThanX(date: CalDate): boolean {
+    var calendarAPI = window.Calendarium.getAPI("test_calendar");
+    var daysBefore = calendarAPI.getStore().getDaysBeforeDate(date);
+    return daysBefore < this.chartXRangeDiff() ? true : false;
   }
 
   isStartOf(value: number, unit: string) {
@@ -261,7 +294,7 @@ export class chartTimeline extends Chart {
     );
   }
 
-  returnMonth(value: number) {
+  returnMonth(value: number): string {
     if (this.months == null) return "";
     return this.months[this.returnMonthIdx(value)].name.substr(0, 3);
     var true_value = this.getTrueValue(value);
@@ -270,28 +303,42 @@ export class chartTimeline extends Chart {
   }
 
   returnDay(value: number) {
+    var trueVal: number;
+    if (value > 0) {
+      trueVal = value;
+    } else {
+      trueVal = 30 - value;
+    }
+    return data.weekdays[Math.round(Math.abs(trueVal) % data.weekdays.length)];
     var true_value = this.getTrueValue(value);
     var idx = Math.floor(true_value / day_value) % data.weekdays.length;
     return data.weekdays[idx];
   }
 
   returnDateTimeString(value: number) {
-    if (this.isLargerThanX(3 * year_value)) {
-      return this.returnYear(value);
+    var calendarAPI = window.Calendarium.getAPI("test_calendar");
+    // days are from year 1, so offset year by 1
+    var date: CalDate = calendarAPI
+      .getStore()
+      .getOffsetDate({ year: 0, month: 0, day: 0 }, Math.abs(value));
+    if (value < 0) {
+      date.year = -date.year;
+      date.month = 12 - date.month;
+      date.day = 30 - date.day;
     }
-    if (this.isLargerThanX(year_value)) {
-      return this.returnYear(value) + ":" + this.returnMonth(value);
+
+    var yearString: string = date.year + "";
+
+    if (this.isLargerThanX({ year: 4, month: 0, day: 1 })) {
+      return yearString.padStart(4, "0");
+    } else if (this.isLargerThanX({ year: 2, month: 0, day: 1 })) {
+      return yearString.padStart(4, "0") + ":" + this.returnMonth(date.month);
+    } else if (this.isLargerThanX({ year: 1, month: 1, day: 1 })) {
+      return this.returnMonth(date.month) + "-" + this.returnDay(date.day);
+    } else {
+      return date.day + ":" + this.returnDay(date.day);
     }
-    if (this.isLargerThanX(month_value)) {
-      return this.returnMonth(value) + "-" + this.returnDayOfMonth(value);
-    }
-    return (
-      this.returnMonth(value) +
-      "-" +
-      this.returnDayOfMonth(value) +
-      ":" +
-      this.returnDay(value)
-    );
+    // return calendarAPI.toDisplayDate(date);
   }
 
   getCurrentYearFormat() {
@@ -371,16 +418,18 @@ export class chartTimeline extends Chart {
   getScale(location: number) {
     var stepSize;
 
-    if (this.isLargerThanX(3 * year_value)) {
+    // days are from year 1, so offset year by 1
+
+    if (this.isLargerThanX({ year: 4, month: 0, day: 1 })) {
       stepSize = year_value;
       this.tickString = "year";
-    } else if (this.isLargerThanX(year_value)) {
+    } else if (this.isLargerThanX({ year: 2, month: 0, day: 1 })) {
       stepSize = month_value;
       this.tickString = "month";
-    } else if (this.isLargerThanX(month_value * 3)) {
+    } else if (this.isLargerThanX({ year: 1, month: 3, day: 1 })) {
       stepSize = 2 * week_value;
       this.tickString = "2week";
-    } else if (this.isLargerThanX(month_value)) {
+    } else if (this.isLargerThanX({ year: 1, month: 1, day: 1 })) {
       stepSize = week_value;
       this.tickString = "week";
     } else {
@@ -533,52 +582,26 @@ function sortEvents(datalist) {
     // if(localDataList[i].level < 0){
     localDataList[i].level = sortThisEvent(localDataList, localDataList[i], 1);
     // }
-    // localDataList[i].valid = true;
   }
   return localDataList;
 }
 
-var earliestEvent: number = null;
-var latestEvent: number = null;
+function getEvents(ownPath: string): EventsType[] {
+  var calendarAPI = window.Calendarium.getAPI("test_calendar");
+  var calendarEvents: EventsType[] = calendarAPI.sortEvents(
+    calendarAPI.getEvents(),
+  );
 
-function getEvents(ownPath: string) {
-  var dataList = [];
-  var Pages = dv.pages().where((t) => t.timelines);
+  Object.keys(calendarEvents).forEach((key) => {
+    calendarEvents[key].timeline = calendarAPI.getObject().name;
 
-  var shownTimelines = dv.page(ownPath).timelines_rendered;
-  for (let page of Pages) {
-    if (shownTimelines != null) {
-      if (
-        page.timelines.some((value) => shownTimelines.includes(value)) == false
-      )
-        continue;
-      if (page["fc-display-name"] == null) continue;
-      if (page["fc-date"] == null) continue;
-      if (page["fc-end"] == null) continue;
-    }
-    var dataObject = {
-      timeline: page.timelines,
-      eventName: page["fc-display-name"].toString(),
+    calendarEvents[key].start = 1;
+    calendarEvents[key].end = 2;
 
-      start: tripletToValue(page["fc-date"]),
-      end: tripletToValue(page["fc-end"]),
-      trueStart: tripletToValue(page["fc-date"]), // also easier to have these numbers not shifted in an array
-      trueEnd: tripletToValue(page["fc-end"]), // since we artifically elongate too short ones, we need to remember what the true end is
+    calendarEvents[key].level = -1;
+  });
 
-      level: page.level == null ? -1 : page.level,
-      valid: page.level == null ? false : true,
-    };
-
-    if (earliestEvent == null || dataObject.start < earliestEvent) {
-      earliestEvent = dataObject.start;
-    }
-    if (latestEvent == null || dataObject.end > latestEvent) {
-      latestEvent = dataObject.end;
-    }
-    dataList.push(dataObject);
-  }
-  return dataList;
-  // return sortEvents(dataList);
+  return calendarEvents;
 }
 
 function tripletToValue(string: string): number {
@@ -597,12 +620,14 @@ function tripletToValue(string: string): number {
 function eventsToData(list) {
   var dataListObject = [];
   list = sortEvents(list);
+  var calendarAPI = window.Calendarium.getAPI("test_calendar");
   for (const event of list) {
+    var daysBefore = calendarAPI.getStore().getDaysBeforeDate(event.date);
     var dataObject = {
-      label: event.eventName,
-      data: range_to_data_lvl([event.start, event.end], event.level),
-      start: event.trueStart,
-      end: event.trueEnd,
+      label: event.name,
+      data: range_to_data_lvl([daysBefore, daysBefore + 1], event.level),
+      start: daysBefore,
+      end: daysBefore + 1,
       level: event.level,
       fill: false,
       backgroundColor: getBarColor(),
@@ -826,7 +851,6 @@ const zoomButton = {
         callback: zoomButtonPlusCallback,
       });
       ZOOM_BUTTON_PLUS_IDX = clickButtonCallbacks.length - 1;
-      console.log(clickButtonCallbacks);
     } else {
       clickButtonCallbacks[ZOOM_BUTTON_PLUS_IDX] = {
         bounds: buttonCoordinatesPlus,
@@ -840,7 +864,6 @@ const zoomButton = {
         callback: zoomButtonMinusCallback,
       });
       ZOOM_BUTTON_MINUS_IDX = clickButtonCallbacks.length - 1;
-      console.log(clickButtonCallbacks);
     } else {
       clickButtonCallbacks[ZOOM_BUTTON_MINUS_IDX] = {
         bounds: buttonCoordinatesMinus,
@@ -868,8 +891,6 @@ function zoomButtonMinusCallback(ctx, click) {
 }
 
 export function clickButtonHandler(ctx, click, chart) {
-  // console.log(click.offsetX, click.offsetY);
-
   for (let i = 0; i < clickButtonCallbacks.length; i++) {
     if (
       click.offsetX >= clickButtonCallbacks[i].bounds.left &&
@@ -911,7 +932,9 @@ export function getTimeline(
   initialChartSizepx: { widthpx: number; heightpx: number },
 ) {
   updateVars(ownPath);
-  var Events = getEvents(ownPath);
+  var Events: EventsType[] = getEvents(ownPath);
+
+  console.log(Events);
   if (chartSize == null) {
     chartSize = {
       widthpx: initialChartSizepx.widthpx,
@@ -947,15 +970,23 @@ export function getTimeline(
             autoSkip: true,
             autoSkipPadding: 5,
             color: function (context) {
-              if (context.chart.isLargerThanX(3 * year_value)) {
+              // days are from year 1, so offset year by 1
+              if (context.chart.isLargerThanX({ year: 4, month: 0, day: 1 })) {
                 return "gray";
-              } else if (context.chart.isLargerThanX(year_value)) {
+              } else if (
+                context.chart.isLargerThanX({ year: 2, month: 0, day: 1 })
+              ) {
                 if (context.chart.isStartOf(context.tick.value, "year"))
                   return "white";
-              } else if (context.chart.isLargerThanX(month_value)) {
+              } else if (
+                context.chart.isLargerThanX({ year: 1, month: 1, day: 1 })
+              ) {
                 if (context.chart.isStartOf(context.tick.value, "month"))
                   return "white";
-              } else if (context.chart.isLargerThanX(week_value)) {
+                // @TODO fill in real day value for a week
+              } else if (
+                context.chart.isLargerThanX({ year: 1, month: 0, day: 7 })
+              ) {
                 if (context.chart.isStartOf(context.tick.value, "week"))
                   return "white";
               }
@@ -969,13 +1000,13 @@ export function getTimeline(
           afterBuildTicks: function (context) {
             var bounds = context.chart.chartBounds();
             var stepSize = month_value;
-            if (context.chart.isLargerThanX(3 * year_value))
+            if (context.chart.isLargerThanX({ year: 4, month: 0, day: 1 }))
               stepSize = year_value;
-            else if (context.chart.isLargerThanX(year_value))
+            else if (context.chart.isLargerThanX({ year: 2, month: 0, day: 1 }))
               stepSize = month_value;
-            else if (context.chart.isLargerThanX(month_value * 3))
+            else if (context.chart.isLargerThanX({ year: 1, month: 3, day: 1 }))
               stepSize = 2 * week_value;
-            else if (context.chart.isLargerThanX(month_value))
+            else if (context.chart.isLargerThanX({ year: 1, month: 1, day: 1 }))
               stepSize = week_value;
             else stepSize = day_value;
 
@@ -1001,6 +1032,7 @@ export function getTimeline(
             enabled: true,
             mode: "xy",
             onPan: function (context) {
+              context.chart.onPan();
               context.chart.updateScaleHeight();
               context.chart.updateScaleHeightBox();
               context.chart.update();
@@ -1027,6 +1059,8 @@ export function getTimeline(
                 setTimeout(delayedZoomFunction(context), 500);
                 lastZoomUpdate = Date.now();
               }
+              context.chart.onZoom();
+              context.chart.update();
             },
           },
         },
@@ -1064,24 +1098,16 @@ export function getTimeline(
         tooltip: {
           callbacks: {
             label: function (context) {
-              var start = context.dataset.start;
-              var end = context.dataset.end;
-              return (
-                context.chart.getDateNumberString(start) +
-                " - " +
-                context.chart.getDateNumberString(end)
-              );
-              var range = [0, 1000];
-              for (let thisData of context.dataset.data)
-                if (thisData != null) range = thisData;
-              return (
-                context.chart.getDateNumberString(range[0]) +
-                " - " +
-                context.chart.getDateNumberString(range[1])
-              );
+              var calendarAPI = window.Calendarium.getAPI("test_calendar");
+              var startDate: CalDate = {
+                year: 0,
+                month: 0,
+                day: context.dataset.start,
+              };
+              return calendarAPI.toDisplayDate(startDate);
             },
             title: function (tooltipItems) {
-              //https://stackoverflow.com/questions/38819171/chart-js-2-0-how-to-change-title-of-tooltip
+              // https://stackoverflow.com/questions/38819171/chart-js-2-0-how-to-change-title-of-tooltip
               if (tooltipItems.length > 0) {
                 return tooltipItems[0].dataset.label || "";
               }

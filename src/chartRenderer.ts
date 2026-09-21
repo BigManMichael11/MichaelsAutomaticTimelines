@@ -28,8 +28,6 @@ export default class Renderer {
 
   renderTimeline(data: any, el: HTMLElement, ownPath: string): chartTimeline {
     const destination = el.createEl("canvas");
-    // console.log(destination.getContext("2d"));
-    //let chart = new Chart(destination.getContext("2d"), getTimeline());
     var chartSizepx = {
       widthpx: destination.clientWidth,
       heightpx: destination.clientHeight,
@@ -49,9 +47,6 @@ export default class Renderer {
     chart.updateScaleHeight();
     chart.updateScaleHeightBox();
     chart.update();
-
-    // console.log(this.plugin.settings.sampleValue);
-
     return chart;
   }
 
