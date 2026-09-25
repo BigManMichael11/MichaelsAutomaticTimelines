@@ -14,6 +14,10 @@ import type {
   CalEvent,
 } from "../../calendarium/main";
 
+import type { Readable, Writable } from "svelte/store";
+
+import { get } from "svelte/store";
+
 export function renderError(error: any, el: HTMLElement) {
   const errorEl = el.createDiv({ cls: "chart-error" });
   errorEl.createEl("b", { text: "Couldn't render Chart:" });
@@ -27,6 +31,9 @@ export function renderError(error: any, el: HTMLElement) {
 
 const CHART_SCALE_MIN = 1;
 const CHART_SCALE_MAX = 14;
+
+const CALENDAR_NAME = "Alchos";
+var calendarAPI = window.Calendarium.getAPI(CALENDAR_NAME);
 
 var chartSize: ChartSize = null;
 
@@ -76,9 +83,6 @@ type EventsType = CalEvent & {
   timeline: string;
   eventName: string;
 
-  start: number;
-  end: number;
-
   level: number;
 };
 
@@ -107,6 +111,8 @@ export class chartTimeline extends Chart {
   };
 
   mCalendarAPI: CalendarAPI;
+  mCalendarStore;
+  mYearLength: number = 365;
 
   constructor(context, chartOptions, calendar, plugin, ownPath: string) {
     super(context, chartOptions);
@@ -134,20 +140,60 @@ export class chartTimeline extends Chart {
       this.moons.push(moon);
     }
 
-    var calendarAPI = window.Calendarium.getAPI("test_calendar");
     var store = calendarAPI.getStore();
-    var monthStore = store.getMonthStoreForDate({ year: 1, month: 1, day: 1 });
-    var yearStore = store.getYearStoreForDate({ year: 1, month: 1, day: 1 });
-    console.log("Calendarapi");
-    console.log(calendarAPI);
-    console.log("store");
-    console.log(store);
-    console.log("month store");
-    console.log(monthStore);
-    console.log("year store");
-    console.log(yearStore);
+    var monthStore = store.getMonthStoreForDate({ year: 2, month: 3, day: 1 });
+    var yearStore = store.getYearStoreForDate({ year: 2, month: 0, day: 0 });
+    this.mYearLength = get(yearStore.daysBefore);
+    // console.log(this.mYearLength);
 
-    this.mCalendarAPI = window.Calendarium.getAPI("test_calendar");
+    // console.log("Calendarapi");
+    // console.log(calendarAPI);
+    // console.log("store");
+    // console.log(store);
+    // console.log("month store");
+    // console.log(monthStore);
+    // console.log("year store");
+    // console.log(yearStore);
+    // console.log(get(yearStore.daysBefore));
+    // console.log(get(yearStore.leapDays));
+
+    // console.log("ephemeral store");
+    // console.log(calendarAPI.getStore().getEphemeralStore());
+
+    // console.log("week subscribe");
+    // console.log(get(monthStore.days)); //32
+    // console.log(get(monthStore.daysAsWeeks)); //array of 4 weeks with empty days filled in
+    // console.log(get(monthStore.daysBefore)); //32
+    // console.log(get(monthStore.daysBeforeAll)); //32
+    // console.log(get(monthStore.eras)); //empty
+    // console.log("first day");
+    // console.log(get(monthStore.firstDay)); //0
+    // console.log(get(monthStore.firstWeekNumber)); //4
+    // console.log(get(monthStore.index)); //1
+    // console.log(get(monthStore.lastDay)); //7
+    // console.log(get(monthStore.leapDays)); //empty array
+    // console.log(get(monthStore.weekdays)); //weekdays filled out
+    // console.log(get(monthStore.weeks)); //4
+
+    this.mCalendarAPI = window.Calendarium.getAPI(CALENDAR_NAME);
+    this.mCalendarStore = this.mCalendarAPI.getStore();
+  }
+
+  getOffsetDate(date: CalDate, offset: number): CalDate {
+    if (!this.mCalendarStore) return { year: 1, month: 0, day: 0 };
+    var localDate: CalDate = date;
+    var localOffset: number = Math.floor(offset % this.mYearLength);
+    localDate.year = Math.floor(date.year + offset / this.mYearLength);
+    return this.mCalendarStore.getOffsetDate(localDate, localOffset);
+  }
+
+  getDaysBeforeDate(date: CalDate) {
+    if (!this.mCalendarStore) return 0;
+    return this.mCalendarStore.getDaysBeforeDate(date);
+  }
+
+  getMonthStoreForDate(date: CalDate) {
+    return this.mCalendarStore.getMonthStoreForDate(date);
   }
 
   onPan() {
@@ -209,47 +255,15 @@ export class chartTimeline extends Chart {
   }
 
   returnYearNumber(value: number): number {
-    if (value > 0) return Math.round(value / this.yearLength);
-    if (value == 0) return 0;
-    return Math.round((value - year_value - 1) / year_value);
-  }
+    var date: CalDate = this.getOffsetDate(
+      { year: 1, month: 0, day: 0 },
+      Math.abs(value),
+    );
 
-  returnMonthIdx(value: number): number {
-    //var true_value = this.getTrueValue(value);
-    //var idx = Math.round(true_value / month_value) % month_value;
-    //return idx;
-
-    //gets to within 1 year, so max months.length - 1 loops
-    var target =
-      value -
-      Math.sign(value) * Math.ceil(value / this.yearLength) * this.yearLength;
-    target = this.getTrueValue(value) % this.yearLength;
-    var curr = 0;
-    var monthIdx = 0;
-    while (curr < target) {
-      if (curr + this.months[monthIdx].length > target) return monthIdx;
-      curr += this.months[monthIdx].length;
-      monthIdx = (monthIdx + 1) % this.months.length;
+    if (value < 0) {
+      return -date.year;
     }
-    return monthIdx;
-  }
-
-  returnDayValue(value: number) {
-    var true_value = this.getTrueValue(value);
-    var idx = Math.round(true_value / day_value) % day_value;
-    return idx + 1;
-  }
-
-  returnMonthOfYear(value: number) {
-    var true_value = this.getTrueValue(value);
-    var idx = Math.round(true_value / month_value) % (year_value / month_value);
-    return idx + 1;
-  }
-
-  returnDayOfMonth(value: number) {
-    var true_value = this.getTrueValue(value);
-    var idx = Math.round(true_value / day_value) % month_value;
-    return idx + 1;
+    return date.year;
   }
 
   getTrueValue(value: number): number {
@@ -265,94 +279,63 @@ export class chartTimeline extends Chart {
   }
 
   isLargerThanX(date: CalDate): boolean {
-    var calendarAPI = window.Calendarium.getAPI("test_calendar");
-    var daysBefore = calendarAPI.getStore().getDaysBeforeDate(date);
+    var daysBefore = this.getDaysBeforeDate(date);
     return daysBefore < this.chartXRangeDiff() ? true : false;
   }
 
-  isStartOf(value: number, unit: string) {
-    var startOfValue;
-    if (unit == "year") startOfValue = year_value;
-    else if (unit == "month") startOfValue = month_value;
-    else if (unit == "week") startOfValue = week_value;
-    else startOfValue = 1;
-
-    var true_value = this.getTrueValue(value);
-    if (Math.round(true_value) === 0) return true;
-    return Math.round(true_value) % startOfValue === 0;
-  }
-
-  isLargerThanYear(chart: Chart) {
-    if (year_value < this.chartXRangeDiff()) return true;
-    return false;
-  }
-
-  returnYear(value: number) {
-    var signStr = value < 0 ? "-" : " ";
-    return (
-      signStr + String(Math.abs(this.returnYearNumber(value))).padStart(4, "0")
-    );
-  }
-
-  returnMonth(value: number): string {
-    if (this.months == null) return "";
-    return this.months[this.returnMonthIdx(value)].name.substr(0, 3);
-    var true_value = this.getTrueValue(value);
-    var idx = Math.floor(true_value / month_value) % data.months.length;
-    return data.months[idx].substr(0, 3);
-  }
-
-  returnDay(value: number) {
-    var trueVal: number;
-    if (value > 0) {
-      trueVal = value;
-    } else {
-      trueVal = 30 - value;
+  returnMonth(date: CalDate): string {
+    if (!date) return "Inv";
+    var monthStore = this.getMonthStoreForDate(date);
+    if (!monthStore.month) {
+      return "Inv";
     }
-    return data.weekdays[Math.round(Math.abs(trueVal) % data.weekdays.length)];
-    var true_value = this.getTrueValue(value);
-    var idx = Math.floor(true_value / day_value) % data.weekdays.length;
-    return data.weekdays[idx];
+    var monthStr = monthStore.month.name.substr(0, 3);
+    return monthStr;
+  }
+
+  returnDay(date: CalDate) {
+    if (!date) return "Inv";
+    var monthStore = this.getMonthStoreForDate(date);
+    var firstDay: number = get(monthStore.firstDay);
+    if (firstDay == null) return "Inv";
+    var weekDays = get(monthStore.weekdays);
+    if (weekDays == null) return "Inv";
+    var dayStr = weekDays[(firstDay + date.day) % weekDays.length].name.substr(
+      0,
+      3,
+    );
+    return dayStr;
   }
 
   returnDateTimeString(value: number) {
-    var calendarAPI = window.Calendarium.getAPI("test_calendar");
+    if (!this.mCalendarStore) return "";
     // days are from year 1, so offset year by 1
-    var date: CalDate = calendarAPI
-      .getStore()
-      .getOffsetDate({ year: 0, month: 0, day: 0 }, Math.abs(value));
-    if (value < 0) {
-      date.year = -date.year;
-      date.month = 12 - date.month;
-      date.day = 30 - date.day;
+    var date: CalDate = this.getOffsetDate(
+      { year: 1, month: 0, day: 0 },
+      Math.floor(Math.abs(value)),
+    );
+
+    if (value <= 0) {
+      date.year = date.year; //@todo invert year value to negatives
+      date.month = 11 - date.month;
+      date.day = 32 - date.day;
     }
 
     var yearString: string = date.year + "";
 
-    if (this.isLargerThanX({ year: 4, month: 0, day: 1 })) {
+    if (this.isLargerThanX({ year: 4, month: 0, day: 0 })) {
       return yearString.padStart(4, "0");
-    } else if (this.isLargerThanX({ year: 2, month: 0, day: 1 })) {
-      return yearString.padStart(4, "0") + ":" + this.returnMonth(date.month);
-    } else if (this.isLargerThanX({ year: 1, month: 1, day: 1 })) {
-      return this.returnMonth(date.month) + "-" + this.returnDay(date.day);
+    } else if (this.isLargerThanX({ year: 2, month: 0, day: 0 })) {
+      return yearString.padStart(4, "0") + ":" + this.returnMonth(date);
+    } else if (this.isLargerThanX({ year: 1, month: 1, day: 0 })) {
+      return this.returnMonth(date) + "-" + date.day;
     } else {
-      return date.day + ":" + this.returnDay(date.day);
+      return date.day + ":" + this.returnDay(date);
     }
-    // return calendarAPI.toDisplayDate(date);
   }
 
   getCurrentYearFormat() {
-    if (!this.isZoomedOrPanned()) return "".padStart(4, "0");
-    var range = this.chartXRangeDiff();
-    var signStr = String(this.currentYear < 0 ? String("-") : String(" "));
-    if (range < month_value)
-      return (
-        signStr +
-        String(Math.abs(this.currentYear)).padStart(4, "0") +
-        " " +
-        this.returnMonth(this.chartMiddle(this.chartBounds()))
-      );
-    return signStr + String(Math.abs(this.currentYear)).padStart(4, "0");
+    return this.returnDateTimeString(this.chartMiddle(this.chartBounds()) - 1);
   }
 
   getValueFromLeftSide(value: number) {
@@ -412,52 +395,10 @@ export class chartTimeline extends Chart {
       borderWidth: 2,
     };
   }
-
-  tickString: string;
-
-  getScale(location: number) {
-    var stepSize;
-
-    // days are from year 1, so offset year by 1
-
-    if (this.isLargerThanX({ year: 4, month: 0, day: 1 })) {
-      stepSize = year_value;
-      this.tickString = "year";
-    } else if (this.isLargerThanX({ year: 2, month: 0, day: 1 })) {
-      stepSize = month_value;
-      this.tickString = "month";
-    } else if (this.isLargerThanX({ year: 1, month: 3, day: 1 })) {
-      stepSize = 2 * week_value;
-      this.tickString = "2week";
-    } else if (this.isLargerThanX({ year: 1, month: 1, day: 1 })) {
-      stepSize = week_value;
-      this.tickString = "week";
-    } else {
-      stepSize = day_value;
-      this.tickString = "day";
-    }
-
-    var center =
-      this.chartMiddle(this.chartBounds()) +
-      this.chartXRangeDiff() / 6 +
-      stepSize * location;
-    if (center + stepSize > this.chartBounds().x.max) return;
-    return this.getBox(center, stepSize, "rgba(112, 112, 112, 0.5)", this);
-  }
-
-  lastClick: number;
-  myResetZoom() {
-    if (Date.now() - this.lastClick < 250) {
-      this.resetZoom();
-      this.update();
-    }
-    this.lastClick = Date.now();
-  }
 }
 
 var data: any = [];
 
-var year_value = 336;
 var month_value = 28;
 var week_value = 7;
 var day_value = 1;
@@ -484,19 +425,13 @@ function updateVars(ownPath: string) {
     weeks_in_month: 4,
   };
 
-  year_value = tmpYearValue;
   month_value = tmpMonthValue;
   week_value = myData.calendars[0].static.weekdays.length;
   day_value = 1;
 
-  if (dv.page(ownPath).MIN_BAR_LENGTH != null) {
-    MIN_BAR_LENGTH = dv.page(ownPath).MIN_BAR_LENGTH;
-  }
-
   return;
 }
 
-var current_year = 0;
 var max_levels = 1;
 
 //'rgba(255, 206, 86, 0.2)'
@@ -508,6 +443,7 @@ function getBarColor() {
 }
 
 function range_to_data_lvl(range: [number, number], level: number) {
+  if (level < 1) return [[start, end]];
   var myData = Array(level - 1).fill(null);
   // for (let i = 0 ; i < (level - 1); i++) myData.push(null);
 
@@ -518,116 +454,95 @@ function range_to_data_lvl(range: [number, number], level: number) {
   return myData;
 }
 
-function sortThisEvent(dataList, event, levelParam: number) {
-  var level = levelParam;
-  for (let e of dataList) {
-    if (e == event) continue;
-    if (e.level == level) {
-      var overlapping = e.start < event.end && event.start < e.end;
-      if (Math.abs(event.start) - Math.abs(event.end) == 0) {
-        // if event is 0 length, check for <= instead of <
-        overlapping = e.start <= event.end && event.start <= e.end;
-      }
+function isOverLapping(a: EventsType, b: EventsType): boolean {
+  var localAStart, localAEnd, localBStart, localBEnd: number;
+  localAStart = calendarAPI.getStore().getDaysBeforeDate(a.date);
+  localAEnd = a.end
+    ? calendarAPI.getStore().getDaysBeforeDate(a.end)
+    : localAStart;
+  localBStart = calendarAPI.getStore().getDaysBeforeDate(b.date);
+  localBEnd = b.end
+    ? calendarAPI.getStore().getDaysBeforeDate(b.end)
+    : localBStart;
 
-      if (chartSize != null && overlapping == false) {
-        var pixelPerValue = chartSize.widthpx / chartSize.widthValue;
-        var minOverlapValue = MIN_BAR_LENGTH / pixelPerValue;
+  if (localAStart <= localBEnd && localBStart <= localAEnd) return true;
+  return false;
+}
 
-        var localStart1 = e.start;
-        var localEnd1 = e.end;
-        var localStart2 = event.start;
-        var localEnd2 = event.end;
-
-        if (e.end - e.start < minOverlapValue) {
-          localStart1 =
-            Math.sign(e.start) * Math.abs(e.start) - minOverlapValue;
-          localEnd1 = Math.sign(e.start) * Math.abs(e.start) + minOverlapValue;
-        }
-
-        if (event.end - event.start < minOverlapValue) {
-          localStart2 =
-            Math.sign(event.start) * Math.abs(event.start) - minOverlapValue;
-          localEnd2 =
-            Math.sign(event.start) * Math.abs(event.start) + minOverlapValue;
-        }
-        // localEnd2 = Math.max(localEnd2, event.end);
-        if (localStart1 < localEnd2 && localStart2 < localEnd1) {
-          overlapping = true;
-        }
-      }
-
-      if (e.level == level && overlapping) {
-        return sortThisEvent(dataList, event, level + 1);
+function getLevel(listByLevel: EventsType[][], event: EventsType) {
+  var i;
+  for (i = 0; i < listByLevel.length; i++) {
+    if (listByLevel[i].length == 0) {
+      listByLevel[i].push(event);
+      return i;
+    }
+    var foundOverlap = false;
+    for (let j = 0; j < listByLevel[i].length; j++) {
+      if (isOverLapping(listByLevel[i][j], event)) {
+        foundOverlap = true;
+        break;
       }
     }
+    if (!foundOverlap) {
+      listByLevel[i].push(event);
+      return i;
+    }
   }
-
-  if (level > max_levels) max_levels = level;
-  return level;
+  listByLevel.push([]);
+  listByLevel[i].push(event);
+  return i;
 }
 
-function compareElements(
-  a: { start: number; end: number },
-  b: { start: number; end: number },
-) {
-  return b.end - b.start - (a.end - a.start);
-}
-
-function sortEvents(datalist) {
-  max_levels = 0;
-  var localDataList = datalist.sort(compareElements);
-  // for(let i = 0; i < localDataList.length; i++){localDataList[i].level = 0;}
+function sortEvents(datalist: EventsType) {
+  var localDataList = datalist;
+  localDataList = localDataList.sort((a, b) => {
+    if ("end" in a && "end" in b) {
+      var localAStart = calendarAPI.getStore().getDaysBeforeDate(a.date);
+      var localAEnd = a.end
+        ? calendarAPI.getStore().getDaysBeforeDate(a.end)
+        : localAStart;
+      var localBStart = calendarAPI.getStore().getDaysBeforeDate(b.date);
+      var localBEnd = b.end
+        ? calendarAPI.getStore().getDaysBeforeDate(b.end)
+        : localBStart;
+      return localBEnd - localBStart - (localAEnd - localAStart);
+    }
+    if ("end" in a) return -1;
+    return 1;
+  });
+  var listByLevel: EventsType[][] = [[]];
   for (let i = 0; i < localDataList.length; i++) {
-    // if(localDataList[i].level > max_levels) max_levels = localDataList[i].level;
-    // if(localDataList[i].level < 0){
-    localDataList[i].level = sortThisEvent(localDataList, localDataList[i], 1);
-    // }
+    localDataList[i].level = getLevel(listByLevel, localDataList[i]) + 1;
+    max_levels = listByLevel.length;
   }
   return localDataList;
 }
 
 function getEvents(ownPath: string): EventsType[] {
-  var calendarAPI = window.Calendarium.getAPI("test_calendar");
-  var calendarEvents: EventsType[] = calendarAPI.sortEvents(
-    calendarAPI.getEvents(),
-  );
+  var calendarEvents: EventsType[] = sortEvents(calendarAPI.getEvents());
 
   Object.keys(calendarEvents).forEach((key) => {
     calendarEvents[key].timeline = calendarAPI.getObject().name;
-
-    calendarEvents[key].start = 1;
-    calendarEvents[key].end = 2;
-
     calendarEvents[key].level = -1;
   });
-
   return calendarEvents;
 }
 
-function tripletToValue(string: string): number {
-  var localString = string[0] == "-" ? string.substring(1) : string;
-  var yearSign = string[0] == "-" ? -1 : 1;
-  var splitString = String(localString).split("-");
-  // if 0 is put in as a day or month, it is treated as 1
-  return (
-    yearSign * Number(splitString[0]) * year_value +
-    (Math.max(Number(splitString[1]), 1) - 1) * month_value +
-    Math.max(Number(splitString[2]), 1) -
-    1
-  );
-}
-
-function eventsToData(list) {
+function eventsToData(list: EventsType) {
   var dataListObject = [];
   list = sortEvents(list);
-  var calendarAPI = window.Calendarium.getAPI("test_calendar");
   for (const event of list) {
     var daysBefore = calendarAPI.getStore().getDaysBeforeDate(event.date);
+    var daysBeforeEnd = daysBefore + 1;
+    if (event.end) {
+      daysBeforeEnd = Math.max(
+        calendarAPI.getStore().getDaysBeforeDate(event.end),
+        daysBeforeEnd,
+      );
+    }
     var dataObject = {
       label: event.name,
-      data: range_to_data_lvl([daysBefore, daysBefore + 1], event.level),
-      start: daysBefore,
-      end: daysBefore + 1,
+      data: range_to_data_lvl([daysBefore, daysBeforeEnd], event.level),
       level: event.level,
       fill: false,
       backgroundColor: getBarColor(),
@@ -651,110 +566,12 @@ function hex2rgb(hex: string) {
   return { r, g, b };
 }
 
-const LEVELS_STRING_ARRAY = [
-  "Level: 1",
-  "Level: 2",
-  "Level: 3",
-  "Level: 4",
-  "Level: 5",
-  "Level: 6",
-  "Level: 7",
-  "Level: 8",
-  "Level: 9",
-  "Level: 10",
-  "Level: 11",
-  "Level: 12",
-  "Level: 13",
-  "Level: 14",
-  "Level: 15",
-  "Level: 16",
-  "Level: 17",
-  "Level: 18",
-  "Level: 19",
-  "Level: 20",
-  "Level: 21",
-  "Level: 22",
-  "Level: 23",
-  "Level: 24",
-  "Level: 25",
-  "Level: 26",
-  "Level: 27",
-  "Level: 28",
-  "Level: 29",
-  "Level: 30",
-  "Level: 31",
-  "Level: 32",
-  "Level: 33",
-  "Level: 34",
-  "Level: 35",
-  "Level: 36",
-  "Level: 37",
-  "Level: 38",
-  "Level: 39",
-  "Level: 40",
-  "Level: 41",
-  "Level: 42",
-  "Level: 43",
-  "Level: 44",
-  "Level: 45",
-  "Level: 46",
-  "Level: 47",
-  "Level: 48",
-  "Level: 49",
-  "Level: 50",
-  "Level: 51",
-  "Level: 52",
-  "Level: 53",
-  "Level: 54",
-  "Level: 55",
-  "Level: 56",
-  "Level: 57",
-  "Level: 58",
-  "Level: 59",
-  "Level: 60",
-  "Level: 61",
-  "Level: 62",
-  "Level: 63",
-  "Level: 64",
-  "Level: 65",
-  "Level: 66",
-  "Level: 67",
-  "Level: 68",
-  "Level: 69",
-  "Level: 70",
-  "Level: 71",
-  "Level: 72",
-  "Level: 73",
-  "Level: 74",
-  "Level: 75",
-  "Level: 76",
-  "Level: 77",
-  "Level: 78",
-  "Level: 79",
-  "Level: 80",
-  "Level: 81",
-  "Level: 82",
-  "Level: 83",
-  "Level: 84",
-  "Level: 85",
-  "Level: 86",
-  "Level: 87",
-  "Level: 88",
-  "Level: 89",
-  "Level: 90",
-  "Level: 91",
-  "Level: 92",
-  "Level: 93",
-  "Level: 94",
-  "Level: 95",
-  "Level: 96",
-  "Level: 97",
-  "Level: 98",
-  "Level: 99",
-];
-
 function levels_var_to_array() {
-  return LEVELS_STRING_ARRAY.slice(0, max_levels);
+  var levelString: string[] = [];
+  for (let i: number = 0; i < max_levels; i++) {
+    levelString.push(`Level: ${i}`);
+  }
+  return levelString;
 }
 
 type ClickCallback = {
@@ -906,23 +723,18 @@ export function clickButtonHandler(ctx, click, chart) {
   // clickButtonCallbacks.ZOOM_BUTTON.callback(ctx, click);
 }
 
-function delayedZoomFunction(context) {
-  chartSize = {
-    widthpx: context.chart.width,
-    heightpx: context.chart.height,
-    widthValue: context.chart.chartXRangeDiff(),
-  };
-  var tmpDataSet = sortEvents(context.chart.data.datasets); //only updated level numbers, still need to remake data
-  for (let i = 0; i < tmpDataSet.length; i++) {
-    tmpDataSet[i].data = range_to_data_lvl(
-      [tmpDataSet[i].start, tmpDataSet[i].end],
-      tmpDataSet[i].level,
-    );
-  }
+function getLastPowerOf(value: number) {
+  return Math.pow(10, Math.ceil(Math.log10(value)));
+}
 
-  context.chart.data.datasets = tmpDataSet;
-  context.chart.data.labels = levels_var_to_array();
-  context.chart.update();
+function incrementTick(tick: number, stepSize: number): number {
+  if (stepSize >= 384) {
+    if (tick < 0 && tick > -stepSize) return 0;
+    else if (tick == 0 && stepSize > 384) return stepSize - 384;
+    else return tick + stepSize;
+  } else {
+    return tick + stepSize;
+  }
 }
 
 var lastZoomUpdate: number = 0;
@@ -933,8 +745,9 @@ export function getTimeline(
 ) {
   updateVars(ownPath);
   var Events: EventsType[] = getEvents(ownPath);
-
+  console.log("Events");
   console.log(Events);
+
   if (chartSize == null) {
     chartSize = {
       widthpx: initialChartSizepx.widthpx,
@@ -948,6 +761,9 @@ export function getTimeline(
   // chartSize = {widthpx: initialChartSizepx.widthpx, heightpx: initialChartSizepx.heightpx, widthValue:  latestEvent - earliestEvent};
   var EventsData = eventsToData(Events);
   var levels = levels_var_to_array();
+
+  console.log("EventsData");
+  console.log(EventsData);
 
   const chartData = {
     type: "bar",
@@ -965,57 +781,80 @@ export function getTimeline(
         },
         x: {
           min: CHART_SCALE_MIN,
-          max: CHART_SCALE_MAX,
+          max: 32 * 12 * 10000,
           ticks: {
             autoSkip: true,
             autoSkipPadding: 5,
             color: function (context) {
+              var date: CalDate = context.chart.getOffsetDate(
+                { year: 1, month: 0, day: 0 },
+                Math.abs(Math.abs(context.tick.value)),
+              );
+
               // days are from year 1, so offset year by 1
-              if (context.chart.isLargerThanX({ year: 4, month: 0, day: 1 })) {
+              if (context.chart.isLargerThanX({ year: 4, month: 0, day: 0 })) {
                 return "gray";
               } else if (
-                context.chart.isLargerThanX({ year: 2, month: 0, day: 1 })
+                context.chart.isLargerThanX({ year: 2, month: 0, day: 0 })
               ) {
-                if (context.chart.isStartOf(context.tick.value, "year"))
-                  return "white";
+                if (date.month == 0) return "white";
               } else if (
-                context.chart.isLargerThanX({ year: 1, month: 1, day: 1 })
+                context.chart.isLargerThanX({ year: 1, month: 1, day: 0 })
               ) {
-                if (context.chart.isStartOf(context.tick.value, "month"))
-                  return "white";
+                if (date.day == 0) return "white";
                 // @TODO fill in real day value for a week
+                // @TODO Fix day of week checking
               } else if (
                 context.chart.isLargerThanX({ year: 1, month: 0, day: 7 })
               ) {
-                if (context.chart.isStartOf(context.tick.value, "week"))
-                  return "white";
+                if (date.day % 7 == 0) return "white";
               }
               return "gray";
             },
             callback: function (value: number, index: number, ticks) {
               if (index === 0 || index === ticks.length - 1) return null;
-              return this.chart.returnDateTimeString(value, ticks);
+              return this.chart.returnDateTimeString(value);
             },
           },
           afterBuildTicks: function (context) {
             var bounds = context.chart.chartBounds();
             var stepSize = month_value;
-            if (context.chart.isLargerThanX({ year: 4, month: 0, day: 1 }))
-              stepSize = year_value;
-            else if (context.chart.isLargerThanX({ year: 2, month: 0, day: 1 }))
-              stepSize = month_value;
-            else if (context.chart.isLargerThanX({ year: 1, month: 3, day: 1 }))
-              stepSize = 2 * week_value;
-            else if (context.chart.isLargerThanX({ year: 1, month: 1, day: 1 }))
-              stepSize = week_value;
-            else stepSize = day_value;
 
-            var firstTick = Math.ceil(bounds.x.min / stepSize) * stepSize;
+            if (context.chart.isLargerThanX({ year: 4, month: 0, day: 0 })) {
+              var rangeYears = Math.floor(bounds.x.max - bounds.x.min) / 384;
+              stepSize = getLastPowerOf(rangeYears / 25);
+              stepSize = stepSize * 384;
+            } else if (
+              context.chart.isLargerThanX({ year: 2, month: 0, day: 0 })
+            )
+              stepSize = 32 * 4;
+            else if (context.chart.isLargerThanX({ year: 1, month: 3, day: 0 }))
+              stepSize = 32;
+            else if (context.chart.isLargerThanX({ year: 1, month: 1, day: 0 }))
+              stepSize = 8;
+            else stepSize = 1;
+
+            var firstTick = Math.floor(bounds.x.min / stepSize) * stepSize;
+            if (stepSize >= 384) {
+              if (bounds.x.min < -384) {
+                firstTick += 384;
+              } else if (bounds.x.min > 384) {
+                firstTick -= 384;
+              }
+            }
 
             var newTicks = [];
             while (firstTick < bounds.x.max) {
-              newTicks.push({ value: firstTick });
-              firstTick += stepSize;
+              if (firstTick >= bounds.x.min)
+                newTicks.push({ value: firstTick });
+              firstTick = incrementTick(firstTick, stepSize);
+            }
+
+            if (newTicks.length < 2) {
+              console.log(
+                `short ticks! stepSize ${stepSize} range ${bounds.x.max - bounds.x.min}`,
+              );
+              console.log(newTicks);
             }
 
             context.ticks = newTicks;
@@ -1041,8 +880,8 @@ export function getTimeline(
           limits: {
             x: {
               minRange: week_value,
-              min: -year_value * 9999,
-              max: year_value * 9999,
+              min: -32 * 12 * 10000,
+              max: 32 * 12 * 10000,
             },
             y: {
               minRange: 2,
@@ -1098,13 +937,17 @@ export function getTimeline(
         tooltip: {
           callbacks: {
             label: function (context) {
-              var calendarAPI = window.Calendarium.getAPI("test_calendar");
-              var startDate: CalDate = {
-                year: 0,
-                month: 0,
-                day: context.dataset.start,
-              };
-              return calendarAPI.toDisplayDate(startDate);
+              var startDate: CalDate = context.chart.getOffsetDate(
+                {
+                  year: 1,
+                  month: 0,
+                  day: 0,
+                },
+                Math.abs(Math.floor(context.dataset.data.at(-1).at(0))),
+              );
+              return calendarAPI.toDisplayDate(
+                context.chart.mCalendarStore.getNextDay(startDate),
+              );
             },
             title: function (tooltipItems) {
               // https://stackoverflow.com/questions/38819171/chart-js-2-0-how-to-change-title-of-tooltip
@@ -1124,58 +967,13 @@ export function getTimeline(
         legend: {
           display: false,
         },
-        annotation: {
-          annotations: {
-            // uncomment to enable scale boxes
-            // bar_major: function(context){
-            //     return context.chart.getScale(0);
-            // },
-            // bar_minor_left: function(context){
-            //     return context.chart.getScale(-1);
-            // },
-            // bar_minor_right: function(context){
-            //     return context.chart.getScale(1);
-            // },
-            // label1: function(context){
-            //     var center = context.chart.chartMiddle(context.chart.chartBounds()) + context.chart.chartXRangeDiff() / 6;
-            //     return {
-            //         type: 'label',
-            //         color: "rgba(255, 255, 255, 0.5)",
-            //         xValue: center,
-            //         yValue: context.chart.scaleHeightBox - 0.5,
-            //         content: [context.chart.tickString],
-            //         font: {
-            //             size: 12,
-            //         }
-            //     }
-            // }
-            /*line_base: function(context){return context.chart.getLine(0, "rgba(112, 112, 112, 1)", context.chart);},
-                        line_day: function(context){return context.chart.getLine(day_value, "rgba(231, 228, 29, 1)", context.chart);},
-                        line_year: function(context){return context.chart.getLine(year_value, "rgba(107, 39, 196, 1)", context.chart);},
-                        line_month: function(context){return context.chart.getLine(month_value, "rgba(79, 207, 216, 1)", context.chart);},*/
-          },
-        },
       },
       events: ["mousemove", "mouseout", "click", "touchstart", "touchmove"],
       onClick: function (e, context, chart) {
-        // chart.myResetZoom();
-        // clickButtonHandler(context, e);
         return;
-        testStringVar = "Clicked!";
-        //context.chart.resetZoom('active');
-        context.chart.update();
-        return;
-        const canvasPosition = this.Chart.helpers.getRelativePosition(
-          e,
-          this.chart,
-        );
-
-        // Substitute the appropriate scale IDs
-        const dataX = this.chart.scales.x.getValueForPixel(canvasPosition.x);
-        const dataY = this.chart.scales.y.getValueForPixel(canvasPosition.y);
       },
     },
   };
-
+  console.log(chartData);
   return chartData;
 }
